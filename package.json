@@ -1,0 +1,13 @@
+{
+  "name": "foundryvtt-research-development",
+  "private": true,
+  "type": "module",
+  "description": "Foundry VTT modules focused on performance, plus their tests and research notes.",
+  "scripts": {
+    "test": "node --test --test-reporter=spec \"tests/*.test.mjs\"",
+    "check": "node scripts/check.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
