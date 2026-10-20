@@ -239,15 +239,51 @@ test("scene, settings and actor payload findings explain what is big", () => {
     packs: [],
     detail: {
       scenes: { bytes: 105 * MB, tokenDelta: 80 * MB, parts: [{ key: "tokens", bytes: 90 * MB }, { key: "walls", bytes: 10 * MB }],
-        largest: [{ name: "Castle Ravenloft", bytes: 12 * MB, tokens: 90, walls: 3000 }] },
-      settings: { bytes: 7 * MB, byPackage: [{ key: "some-module", bytes: 6 * MB, count: 3 }] },
+        largest: [{ name: "Castle Ravenloft", bytes: 12 * MB, tokens: 90, walls: 3000 }],
+        tokens: {
+          count: 1500, linked: 40, unlinked: 1460, deltaBytes: 80 * MB, items: 52000, withItems: 1200,
+          parts: [{ key: "items", bytes: 78 * MB }, { key: "system", bytes: 2 * MB }],
+          same: { items: 50000, bytes: 75 * MB }, linkedDelta: { tokens: 6, bytes: 3 * MB }, missingActor: { tokens: 0, bytes: 0 },
+          largest: [{ scene: "Vallaki", name: "Guard", linked: false, bytes: MB, delta: MB, items: 60, same: 60, effects: 0 }],
+          byActor: [{ actor: "Vistani Bandit", tokens: 40, bytes: 20 * MB, items: 2400, same: 2400 }, { actor: null, tokens: 3, bytes: MB, items: 90, same: 0 }]
+        } },
+      settings: { bytes: 7 * MB, byPackage: [{ key: "some-module", bytes: 6 * MB, count: 3 }],
+        largest: [{ key: "some-module.cache", bytes: 5 * MB }, { key: "core.time", bytes: 10 }] },
       actors: { bytes: 23 * MB, largest: [{ name: "Strahd", type: "npc", bytes: MB, items: 58 }] }
     }
   };
   const findings = recommend(report);
   const scenes = findings.find(f => f.title.startsWith("Scenes are 105.0 MB"));
-  assert.match(scenes.detail, /tokens 90\.0 MB.*own copies of actor data are 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
-  assert.match(findings.find(f => f.title.startsWith("World settings are")).detail, /some-module 6\.0 MB/);
+  assert.match(scenes.detail, /tokens 90\.0 MB.*own actor data \(their "delta"\) is 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
+  const copies = findings.find(f => f.title === "Unlinked tokens store 78.0 MB of their own item copies");
+  assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 50000 of those copies \(75\.0 MB\) are identical/);
+  assert.match(copies.detail, /Vistani Bandit \(40 tokens, 20\.0 MB\); a deleted actor \(3 tokens, 1\.0 MB\)/);
+  assert.ok(findings.some(f => f.title === "6 linked tokens still store 3.0 MB of actor data"));
+  assert.match(findings.find(f => f.title.startsWith("World settings are")).detail,
+    /some-module 6\.0 MB\. Largest settings: some-module\.cache 5\.0 MB\. /);
   assert.match(findings.find(f => f.title.startsWith("World actors are")).detail, /Strahd 1\.0 MB \(58 items\)/);
-  assert.ok(reportToHtml({ ...report, findings }).includes("Largest scenes"));
+  const html = reportToHtml({ ...report, findings });
+  for ( const caption of ["Largest scenes", "Token data by sidebar actor", "Largest tokens", "Largest world settings"] ) {
+    assert.ok(html.includes(caption), caption);
+  }
+});
+
+test("the wait for world data is a timeline phase, a headline number and a finding", () => {
+  const report = heavyWorldReport();
+  report.timeline = {
+    navigation: { domContentLoaded: 619 },
+    marks: { scriptEval: 455, init: 11618, setup: 21454, ready: 23391, readyComplete: 24007 }
+  };
+  report.longFrames.load.worst = [{ start: 10334, duration: 1388, phase: "load", scripts: [] }];
+  report.payload = { sections: [{ key: "scenes", bytes: 140 * 1024 * 1024, count: 128 }], packs: [], detail: {} };
+  const findings = recommend(report);
+  const wait = findings.find(f => f.title === "This computer waited 9.7 s for the world data");
+  assert.equal(wait.severity, "medium");
+  assert.match(wait.detail, /from 0\.6 s to 10\.3 s after load.*\(140\.0 MB\)/);
+  assert.deepEqual(wait.actions, [], "payload already measured: nothing to turn on");
+  const rows = timelineRows(report.timeline, null, 10334);
+  assert.deepEqual(rows.slice(0, 3).map(r => r.label), ["Performance Triage loaded", "World data arrived (estimated)", "init"]);
+  assert.equal(rows[1].delta, 10334 - 455);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("Waiting for the server") && html.includes("9.7 s"));
 });

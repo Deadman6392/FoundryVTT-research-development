@@ -69,10 +69,14 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   sampler and layer cost measurement are loaded only when opened. No templates or stylesheets are fetched at startup.
 - Always on: two `PerformanceObserver`s that only run when the browser already produced an entry (a file finished
   loading, or a frame took over 50 ms), folded into small aggregates immediately.
+- For the first minute after loading (when summary sharing is on): a frame counter on the canvas ticker, one
+  increment per rendered frame, and a check every 5 seconds. Both stop after the minute.
 - With a profile: one passive input listener that stores a timestamp, a dozen trivial hook listeners, and a
   once-per-second check.
 - Hook profiler, when enabled: two `performance.now()` calls per hook listener invocation. Its own listeners show up
-  in its own tables.
+  in its own tables. It also measures the world data once, right after init, from a file that is only fetched while
+  the profiler is on. That takes a fraction of a second for a 140 MB world on a desktop (about 0.55 s in Node for a
+  synthetic 124 MB world) and the report shows how long it took on your computer.
 - Summary sharing: one update to your own User document per session, about a minute after loading.
 
 ## Why it is marked as a library

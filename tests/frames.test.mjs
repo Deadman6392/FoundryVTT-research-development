@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { frameMs, frameCostRows, settledAt, phasesWithin } from "../modules/performance-triage/scripts/lib/frames.mjs";
+import { frameMs, frameCostRows, settledAt, phasesWithin, worldDataWait } from "../modules/performance-triage/scripts/lib/frames.mjs";
 
 test("frameCostRows converts frame rates into time saved per frame, largest first", () => {
   const rows = frameCostRows(18, [
@@ -31,4 +31,12 @@ test("phasesWithin lists the startup marks inside a frame in order", () => {
   const marks = { init: 18273, i18nInit: 18762, setup: 41155, canvasReady: 54949, ready: 54981, readyComplete: 97800 };
   assert.deepEqual(phasesWithin({ start: 54866, duration: 42926 }, marks), ["canvasReady", "ready"]);
   assert.deepEqual(phasesWithin({ start: 18870, duration: 22682 }, marks), ["setup"]);
+});
+
+test("worldDataWait measures the idle gap before the frame that runs init", () => {
+  const timeline = { navigation: { domContentLoaded: 619 }, marks: { scriptEval: 455, init: 11618, setup: 21454 } };
+  const frames = [{ start: 11911, duration: 9693 }, { start: 10334, duration: 1388 }];
+  assert.deepEqual(worldDataWait(timeline, frames), { from: 619, to: 10334, ms: 9715 });
+  assert.equal(worldDataWait(timeline, [{ start: 11911, duration: 9693 }]), null, "no frame contains init");
+  assert.equal(worldDataWait({ marks: {} }, frames), null);
 });

@@ -5,7 +5,7 @@
 import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { describeSummary } from "./recommend.mjs";
-import { settledAt } from "./frames.mjs";
+import { settledAt, worldDataWait } from "./frames.mjs";
 
 /* -------------------------------------------- */
 /*  Formatting helpers                          */
@@ -38,7 +38,7 @@ const pkg = key => {
 
 const PHASE_ORDER = [
   ["responseEnd", "Page received"], ["domInteractive", "Page parsed"], ["scriptEval", "Performance Triage loaded"],
-  ["init", "init"], ["i18nInit", "i18nInit"], ["setup", "setup"], ["canvasInit", "canvasInit"],
+  ["worldData", "World data arrived (estimated)"], ["init", "init"], ["i18nInit", "i18nInit"], ["setup", "setup"], ["canvasInit", "canvasInit"],
   ["canvasReady", "canvasReady (first scene drawn)"], ["ready", "ready hook fired"],
   ["readyComplete", "ready handlers finished"], ["settled", "Settled (no long freeze for 2 s)"]
 ];
@@ -49,10 +49,16 @@ export function settledTime(report) {
   return settledAt(report.timeline?.marks?.readyComplete, frames);
 }
 
+/** How long the page waited on the server for the world data, when the long frames show it. */
+export function worldWait(report) {
+  return worldDataWait(report.timeline, report.longFrames?.load?.worst);
+}
+
 /** Ordered startup phases with absolute time and time since the previous phase. */
-export function timelineRows(timeline, settled = null) {
+export function timelineRows(timeline, settled = null, worldData = null) {
   const all = { ...(timeline?.navigation ?? {}), ...(timeline?.marks ?? {}) };
   if ( Number.isFinite(settled) && (settled > (all.readyComplete ?? 0)) ) all.settled = settled;
+  if ( Number.isFinite(worldData) ) all.worldData = worldData;
   const rows = [];
   let previous = 0;
   for ( const [key, label] of PHASE_ORDER ) {
@@ -71,12 +77,14 @@ export function timelineRows(timeline, settled = null) {
 /** Each section yields { title, intro?, tables: [{caption?, head, rows}], notes?, actions? } */
 function sections(report, opts = {}) {
   const out = [];
-  const tl = timelineRows(report.timeline, settledTime(report));
+  const tl = timelineRows(report.timeline, settledTime(report), worldWait(report)?.to);
   out.push({
     id: "timeline",
     title: "Startup timeline",
     intro: "Time since the browser started loading the page. Large gaps point at the phase to investigate. "
-      + "\"ready hook fired\" is when Foundry starts calling ready handlers; the game is usable once they finish.",
+      + "Before \"World data arrived\" the page is idle, waiting on the server and the network; after it, this "
+      + "computer is building the world. \"ready hook fired\" is when Foundry starts calling ready handlers; the "
+      + "game is usable once they finish.",
     tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) }]
   });
 
@@ -164,7 +172,8 @@ function sections(report, opts = {}) {
     out.push({
       id: "payload",
       title: "World data sent to every client",
-      intro: "Approximate serialized size of the initial world data, measured at init.",
+      intro: "Approximate serialized size of the initial world data, measured at init"
+        + (Number.isFinite(p.ms) ? ` in ${fmtMs(p.ms)}. The measurement only runs while the hook profiler is on.` : "."),
       tables: [
         { head: ["Section", "Size", "Documents"], rows: p.sections.slice(0, 15).map(s => [s.key, fmtBytes(s.bytes), s.count || ""]) },
         ...payloadDetailTables(p.detail ?? {}),
@@ -263,6 +272,12 @@ function sections(report, opts = {}) {
       t.push({ caption: `Actor preparation: ${report.prep.count} actors in ${fmtMs(report.prep.totalMs)}`,
         head: ["Actor", "Type", "Time", "Items", "Effects"],
         rows: report.prep.actors.slice(0, 15).map(a => [a.name, a.type, fmtMs(a.ms), a.items, a.effects]) });
+      const tok = report.prep.tokens;
+      if ( tok?.count ) {
+        t.push({ caption: `Unlinked token actors: ${tok.count} on all scenes in ${fmtMs(tok.totalMs)}`,
+          head: ["Token", "Scene", "Time", "Items", "Effects"],
+          rows: tok.rows.slice(0, 15).map(a => [a.name, a.scene, fmtMs(a.ms), a.items, a.effects]) });
+      }
     }
     out.push({
       id: "world", title: "World contents", tables: t,
@@ -314,6 +329,28 @@ function payloadDetailTables(detail) {
       caption: "Largest scenes", head: ["Scene", "Size", "Tokens", "Walls"],
       rows: sc.largest.map(x => [x.name, fmtBytes(x.bytes), x.tokens, x.walls])
     });
+    const tk = sc.tokens;
+    if ( tk?.count ) {
+      tables.push({
+        caption: `Tokens: ${tk.count} on all scenes, ${tk.unlinked} unlinked. ${tk.withItems} store their own copies of `
+          + `${tk.items} items; ${tk.same.items} of those copies (${fmtBytes(tk.same.bytes)}) match the sidebar `
+          + "actor's item exactly apart from timestamps.",
+        head: ["Token data", "Size"],
+        rows: [
+          ...tk.parts.map(x => [`delta: ${x.key}`, fmtBytes(x.bytes)]),
+          ["Linked tokens that still store items or effects", `${tk.linkedDelta.tokens} (${fmtBytes(tk.linkedDelta.bytes)})`],
+          ["Unlinked tokens whose actor no longer exists", `${tk.missingActor.tokens} (${fmtBytes(tk.missingActor.bytes)})`]
+        ]
+      });
+      tables.push({
+        caption: "Token data by sidebar actor", head: ["Actor", "Tokens", "Size", "Item copies", "Matching the actor"],
+        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items, g.same])
+      });
+      tables.push({
+        caption: "Largest tokens", head: ["Token", "Scene", "Linked", "Size", "Item copies", "Matching", "Effects"],
+        rows: tk.largest.map(t => [t.name, t.scene, t.linked ? "yes" : "no", fmtBytes(t.bytes), t.items, t.same, t.effects])
+      });
+    }
   }
   if ( detail.actors ) {
     tables.push({
@@ -326,6 +363,12 @@ function payloadDetailTables(detail) {
       caption: "World settings by package", head: ["Package", "Size", "Settings"],
       rows: detail.settings.byPackage.map(g => [g.key, fmtBytes(g.bytes), g.count])
     });
+    if ( detail.settings.largest?.length ) {
+      tables.push({
+        caption: "Largest world settings", head: ["Setting", "Size"],
+        rows: detail.settings.largest.map(x => [x.key, fmtBytes(x.bytes)])
+      });
+    }
   }
   return tables;
 }
@@ -372,9 +415,11 @@ export function reportToHtml(report, opts = {}) {
   const idle = report.profile?.idle;
   const marks = report.timeline?.marks ?? {};
   const usable = settledTime(report) ?? marks.readyComplete ?? marks.ready;
+  const wait = worldWait(report);
   const fps = report.client?.fps?.achieved ?? report.client?.liveFps;
   const cards = [
     ["Time until usable", fmtMs(usable)],
+    ...(wait ? [["Waiting for the server", fmtMs(wait.ms)]] : []),
     ["Frame rate", Number.isFinite(fps) ? `${fps} fps` : "–"],
     ["Files at startup", load ? `${load.count} (${fmtBytes(load.transfer)})` : "–"],
     ["Long frames", report.longFrames?.supported ? String(lfFrames) : "n/a"],
