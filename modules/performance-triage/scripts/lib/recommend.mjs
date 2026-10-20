@@ -6,6 +6,7 @@
 import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { phasesWithin } from "./frames.mjs";
+import { SELF_KEY } from "../constants.mjs";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
 const MB = 1024 * 1024;
@@ -35,6 +36,35 @@ function freezeAction(phases, can) {
   if ( phases.includes("canvasReady") || phases.includes("canvasInit") ) return can.layerCosts;
   if ( phases.includes("setup") ) return can.actorTiming;
   return can.hookProfiler;
+}
+
+/** Hooks whose listeners run inside each kind of startup freeze. */
+const FREEZE_HOOKS = {
+  ready: ["ready", "canvasReady"],
+  canvasReady: ["canvasReady", "canvasInit"],
+  setup: ["setup", "i18nInit"]
+};
+
+/**
+ * Name what the hook profiler and actor timing found inside a freeze, or return "" when nothing was measured.
+ * @returns {string}
+ */
+function freezeCulprits(phases, report) {
+  const notes = [];
+  const kind = phases.includes("ready") ? "ready" : (phases.includes("canvasReady") ? "canvasReady" : (phases.includes("setup") ? "setup" : null));
+  const hooks = FREEZE_HOOKS[kind] ?? [];
+  const listeners = (report.hooks?.listeners ?? [])
+    .filter(l => hooks.includes(l.hook) && (l.max > 500) && (l.pkg !== SELF_KEY))
+    .sort((a, b) => b.max - a.max).slice(0, 3);
+  if ( listeners.length ) {
+    notes.push("The hook profiler measured " + listeners.map(l => `${name(l.pkg)}'s ${l.hook} handler at ${secs(l.max)}`)
+      .join(", ") + ".");
+  }
+  if ( (kind === "setup") && report.prep?.totalMs ) {
+    notes.push(`Re-preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer, `
+      + "so actors account for roughly that much; the rest is most likely building scenes and other world documents.");
+  }
+  return notes.join(" ");
 }
 
 /** What a startup freeze most likely contains, from the phases it spans. */
@@ -122,6 +152,31 @@ export function recommend(report) {
         "Trim the largest sections: archive old chat, move unused actors/items into compendiums, and disable modules "
         + "whose compendiums you never use.");
     }
+    const scenes = payload.detail?.scenes;
+    if ( scenes && (scenes.bytes > 20 * MB) ) {
+      const parts = scenes.parts.slice(0, 4).map(p => `${p.key} ${mb(p.bytes)}`).join(", ");
+      const delta = scenes.tokenDelta > 0.25 * scenes.bytes
+        ? ` Unlinked tokens' own copies of actor data are ${mb(scenes.tokenDelta)} of that.` : "";
+      add("high", "World", `Scenes are ${mb(scenes.bytes)} of the world data`,
+        `By part: ${parts}.${delta} Largest scenes: `
+        + scenes.largest.slice(0, 5).map(x => `${x.name} ${mb(x.bytes)} (${x.tokens} tokens, ${x.walls} walls)`).join("; ")
+        + ". Every scene in the world is sent to every client at load, including ones nobody is using.",
+        "Export scenes the party isn't near to a compendium and delete them from the world; bring them back when "
+        + "needed. Unlinked tokens on a scene each carry a full copy of their actor, so trimming unused tokens helps too.");
+    }
+    const settings = payload.detail?.settings;
+    if ( settings && (settings.bytes > 2 * MB) ) {
+      add("medium", "World", `World settings are ${mb(settings.bytes)}`,
+        "Largest by package: " + settings.byPackage.slice(0, 5).map(g => `${g.key} ${mb(g.bytes)}`).join(", ")
+        + ". Settings are loaded by every client; a module storing large data there costs everyone.",
+        "Check that module's options for stored history or caches you can clear, or report it to its author.");
+    }
+    const actorBytes = payload.detail?.actors;
+    if ( actorBytes && (actorBytes.bytes > 10 * MB) ) {
+      add("medium", "World", `World actors are ${mb(actorBytes.bytes)} of the world data`,
+        "Largest: " + actorBytes.largest.slice(0, 5).map(a => `${a.name} ${mb(a.bytes)} (${a.items} items)`).join("; ") + ".",
+        "Keep NPCs you aren't using right now in a compendium; drag them in when needed.");
+    }
     const packTop = (payload.packs ?? []).slice(0, 3).filter(p => p.bytes > 2 * MB);
     if ( packTop.length ) {
       add("medium", "World", "Large compendium indexes are sent at startup",
@@ -154,8 +209,8 @@ export function recommend(report) {
   }
   const slowActors = (report.prep?.actors ?? []).filter(a => a.ms > 20).slice(0, 5);
   if ( slowActors.length ) {
-    add("medium", "World", "Some actors are expensive to prepare",
-      slowActors.map(a => `${a.name}: ${ms(a.ms)} (${a.items} items, ${a.effects} effects)`).join("; ")
+    add("medium", "World", `Preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer`,
+      "Slowest: " + slowActors.map(a => `${a.name}: ${ms(a.ms)} (${a.items} items, ${a.effects} effects)`).join("; ")
       + ". Preparation runs on every client at load and again on every update to the actor.",
       "Look for duplicated or leftover items and effects on these actors.");
   }
@@ -164,10 +219,11 @@ export function recommend(report) {
   const marks = report.timeline?.marks ?? {};
   for ( const frame of (report.longFrames?.load?.worst ?? []).filter(f => f.duration > 5000).slice(0, 3) ) {
     const phases = phasesWithin(frame, marks);
+    const found = freezeCulprits(phases, report);
     add("high", "Startup", `The page froze for ${secs(frame.duration)} in one block during startup`,
       `From ${secs(frame.start)} to ${secs(frame.start + frame.duration)} after page load`
-      + (phases.length ? `, spanning ${phases.join(", ")}` : "") + ". " + explainFreeze(phases),
-      "", [freezeAction(phases, can)]);
+      + (phases.length ? `, spanning ${phases.join(", ")}` : "") + ". " + (found || explainFreeze(phases)),
+      "", found ? [] : [freezeAction(phases, can)]);
   }
 
   // Modules
@@ -205,7 +261,8 @@ export function recommend(report) {
   }
 
   // Hook cost
-  const hookPkgs = (report.hooks?.packages ?? []).filter(p => p.pkg !== "core");
+  // This module's own cost while profiling (measuring the world data at init) is visible in the tables, not here
+  const hookPkgs = (report.hooks?.packages ?? []).filter(p => (p.pkg !== "core") && (p.pkg !== SELF_KEY));
   const heavy = hookPkgs.filter(p => p.self > 250).slice(0, 5);
   if ( heavy.length ) {
     add("high", "Modules", "Modules with the most time spent in hook listeners",
@@ -213,7 +270,7 @@ export function recommend(report) {
       + ` during the last ${Math.round((report.hooks.windowMs ?? 0) / 1000)} s.`,
       "Check these modules' settings for features you do not use. Expand the hook table to see which hooks.");
   }
-  const spiky = (report.hooks?.listeners ?? []).filter(l => (l.max > 50) && (l.pkg !== "core")).slice(0, 5);
+  const spiky = (report.hooks?.listeners ?? []).filter(l => (l.max > 50) && (l.pkg !== "core") && (l.pkg !== SELF_KEY)).slice(0, 5);
   if ( spiky.length ) {
     add("medium", "Modules", "Hook listeners that froze the page for more than 50 ms at once",
       spiky.map(l => `${name(l.pkg)} on ${l.hook}: ${ms(l.max)}`).join("; "),

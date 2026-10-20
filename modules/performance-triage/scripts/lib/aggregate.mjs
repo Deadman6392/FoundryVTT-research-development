@@ -197,15 +197,92 @@ export function analyzeTrace(trace, origin, interval = 10) {
   };
 }
 
+/** Embedded collections worth naming in the scene breakdown; anything else is "other". */
+const SCENE_PARTS = new Set(["tokens", "walls", "tiles", "drawings", "notes", "lights", "sounds", "regions",
+  "templates", "levels", "flags"]);
+
 /**
- * Estimate the serialized size of each part of the world payload.
+ * Size scenes part by part, so the report can say what makes them big. Each value is stringified once; part sizes
+ * add up to the scene total (give or take punctuation). Unlinked tokens carry their own actor data in "delta",
+ * which is tracked separately because it is often most of a scene.
+ */
+function sceneBreakdown(scenes) {
+  const parts = new Map();
+  const top = new TopN(10, s => s.bytes);
+  let bytes = 0;
+  let tokenDelta = 0;
+  for ( const scene of scenes ) {
+    let sceneBytes = 0;
+    for ( const [key, value] of Object.entries(scene ?? {}) ) {
+      let size = 0;
+      if ( (key === "tokens") && Array.isArray(value) ) {
+        for ( const token of value ) {
+          for ( const [tk, tv] of Object.entries(token ?? {}) ) {
+            const s = safeSize(tv) + tk.length + 3;
+            size += s;
+            if ( tk === "delta" ) tokenDelta += s;
+          }
+        }
+      } else size = safeSize(value) + key.length + 3;
+      sceneBytes += size;
+      const part = SCENE_PARTS.has(key) ? key : "other";
+      parts.set(part, (parts.get(part) ?? 0) + size);
+    }
+    bytes += sceneBytes;
+    top.add({ name: scene?.name ?? "", bytes: sceneBytes, tokens: scene?.tokens?.length ?? 0, walls: scene?.walls?.length ?? 0 });
+  }
+  return {
+    bytes,
+    tokenDelta,
+    parts: [...parts.entries()].map(([key, b]) => ({ key, bytes: b })).sort((a, b) => b.bytes - a.bytes),
+    largest: top.items
+  };
+}
+
+/** Size world settings grouped by the package that owns them (the part of the key before the first dot). */
+function settingsBreakdown(settings) {
+  const groups = new Map();
+  let bytes = 0;
+  for ( const s of settings ) {
+    const size = safeSize(s);
+    bytes += size;
+    const ns = String(s?.key ?? "").split(".")[0] || "unknown";
+    const g = groups.get(ns) ?? { key: ns, bytes: 0, count: 0 };
+    g.bytes += size;
+    g.count++;
+    groups.set(ns, g);
+  }
+  return { bytes, byPackage: [...groups.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10) };
+}
+
+/** Size each world actor; the largest are usually imported NPCs carrying full item descriptions. */
+function actorBreakdown(actors) {
+  const top = new TopN(10, a => a.bytes);
+  let bytes = 0;
+  for ( const a of actors ) {
+    const size = safeSize(a);
+    bytes += size;
+    top.add({ name: a?.name ?? "", type: a?.type ?? "", bytes: size, items: a?.items?.length ?? 0 });
+  }
+  return { bytes, largest: top.items };
+}
+
+/**
+ * Estimate the serialized size of each part of the world payload, with breakdowns of the parts that are usually
+ * largest (scenes, actors, settings) and compendium indexes by package.
  * @param {object} data       game.data at init time
- * @returns {{sections: {key: string, bytes: number, count: number}[], packs: {key: string, bytes: number, packs: number, entries: number}[]}}
  */
 export function measurePayload(data) {
   const sections = [];
   const packs = new Map();
+  const detail = {};
+  const breakdowns = { scenes: sceneBreakdown, settings: settingsBreakdown, actors: actorBreakdown };
   for ( const [key, value] of Object.entries(data ?? {}) ) {
+    if ( breakdowns[key] && Array.isArray(value) ) {
+      detail[key] = breakdowns[key](value);
+      sections.push({ key, bytes: detail[key].bytes, count: value.length });
+      continue;
+    }
     if ( key === "packs" && Array.isArray(value) ) {
       let bytes = 0;
       for ( const p of value ) {
@@ -225,7 +302,8 @@ export function measurePayload(data) {
   }
   return {
     sections: sections.sort((a, b) => b.bytes - a.bytes),
-    packs: [...packs.values()].sort((a, b) => b.bytes - a.bytes)
+    packs: [...packs.values()].sort((a, b) => b.bytes - a.bytes),
+    detail
   };
 }
 
