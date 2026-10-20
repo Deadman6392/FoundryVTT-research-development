@@ -48,7 +48,7 @@ test("recommend raises the expected findings, most severe first", () => {
   assert.ok(titles.some(t => t.startsWith("Textures use about")));
   assert.ok(titles.includes("Very large images in this scene"));
   assert.ok(titles.some(t => t.startsWith("Sam may need the minimum profile")));
-  assert.ok(titles.includes("Some actors are expensive to prepare"));
+  assert.ok(titles.includes("Preparing all 900 world actors takes 9.0 s on this computer"));
   const order = { high: 0, medium: 1, low: 2, info: 3 };
   for ( let i = 1; i < findings.length; i++ ) assert.ok(order[findings[i - 1].severity] <= order[findings[i].severity]);
 });
@@ -207,4 +207,47 @@ test("findings carry the button for their next step, and drop it once that step 
   assert.deepEqual(ids("The page froze for 42.9 s"), []);
   assert.deepEqual(ids("The page froze for 22.7 s"), []);
   assert.deepEqual(ids("This client renders about 18 fps"), ["useLowProfile"]);
+});
+
+test("freezes name what the hook profiler and actor timing found, instead of asking to run them", () => {
+  const report = heavyWorldReport();
+  report.hookProfilerEnabled = true;
+  report.hooks = { windowMs: 120000, packages: [
+    { pkg: "module:sequencer", calls: 189, self: 40003, max: 39961, hooks: 8 },
+    { pkg: "module:performance-triage", calls: 11, self: 862, max: 860, hooks: 6 }
+  ], listeners: [
+    { pkg: "module:sequencer", hook: "ready", calls: 2, total: 39961, self: 39956, max: 39961 },
+    { pkg: "module:performance-triage", hook: "init", calls: 3, total: 861, self: 861, max: 860 }
+  ] };
+  report.prep = { count: 377, totalMs: 7210, actors: [{ name: "PC", type: "character", ms: 333, items: 171, effects: 2 }] };
+  const findings = recommend(report);
+  const ready = findings.find(f => f.title.startsWith("The page froze for 42.9 s"));
+  assert.match(ready.detail, /sequencer's ready handler at 40\.0 s/);
+  assert.deepEqual(ready.actions, []);
+  const setup = findings.find(f => f.title.startsWith("The page froze for 22.7 s"));
+  assert.match(setup.detail, /377 world actors takes 7\.2 s/);
+  const hooks = findings.find(f => f.title === "Modules with the most time spent in hook listeners");
+  assert.ok(!hooks.detail.includes("performance-triage"), "this module's own profiling cost is not a culprit");
+  assert.ok(findings.some(f => f.title === "Preparing all 377 world actors takes 7.2 s on this computer"));
+});
+
+test("scene, settings and actor payload findings explain what is big", () => {
+  const MB = 1024 * 1024;
+  const report = heavyWorldReport();
+  report.payload = {
+    sections: [{ key: "scenes", bytes: 105 * MB, count: 128 }, { key: "actors", bytes: 23 * MB, count: 377 }, { key: "settings", bytes: 7 * MB, count: 1299 }],
+    packs: [],
+    detail: {
+      scenes: { bytes: 105 * MB, tokenDelta: 80 * MB, parts: [{ key: "tokens", bytes: 90 * MB }, { key: "walls", bytes: 10 * MB }],
+        largest: [{ name: "Castle Ravenloft", bytes: 12 * MB, tokens: 90, walls: 3000 }] },
+      settings: { bytes: 7 * MB, byPackage: [{ key: "some-module", bytes: 6 * MB, count: 3 }] },
+      actors: { bytes: 23 * MB, largest: [{ name: "Strahd", type: "npc", bytes: MB, items: 58 }] }
+    }
+  };
+  const findings = recommend(report);
+  const scenes = findings.find(f => f.title.startsWith("Scenes are 105.0 MB"));
+  assert.match(scenes.detail, /tokens 90\.0 MB.*own copies of actor data are 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
+  assert.match(findings.find(f => f.title.startsWith("World settings are")).detail, /some-module 6\.0 MB/);
+  assert.match(findings.find(f => f.title.startsWith("World actors are")).detail, /Strahd 1\.0 MB \(58 items\)/);
+  assert.ok(reportToHtml({ ...report, findings }).includes("Largest scenes"));
 });

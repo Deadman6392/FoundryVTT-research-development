@@ -167,6 +167,7 @@ function sections(report, opts = {}) {
       intro: "Approximate serialized size of the initial world data, measured at init.",
       tables: [
         { head: ["Section", "Size", "Documents"], rows: p.sections.slice(0, 15).map(s => [s.key, fmtBytes(s.bytes), s.count || ""]) },
+        ...payloadDetailTables(p.detail ?? {}),
         { caption: "Compendium indexes by package", head: ["Package", "Size", "Packs", "Entries"],
           rows: p.packs.slice(0, 15).map(x => [pkg(x.key), fmtBytes(x.bytes), x.packs, x.entries]) }
       ]
@@ -298,6 +299,35 @@ function sections(report, opts = {}) {
     });
   }
   return out;
+}
+
+/** Breakdown tables for the parts of the world data that are usually largest. */
+function payloadDetailTables(detail) {
+  const tables = [];
+  const sc = detail.scenes;
+  if ( sc ) {
+    tables.push({
+      caption: `Scenes by part (unlinked tokens' own actor data: ${fmtBytes(sc.tokenDelta)})`,
+      head: ["Part", "Size"], rows: sc.parts.map(x => [x.key, fmtBytes(x.bytes)])
+    });
+    tables.push({
+      caption: "Largest scenes", head: ["Scene", "Size", "Tokens", "Walls"],
+      rows: sc.largest.map(x => [x.name, fmtBytes(x.bytes), x.tokens, x.walls])
+    });
+  }
+  if ( detail.actors ) {
+    tables.push({
+      caption: "Largest world actors", head: ["Actor", "Type", "Size", "Items"],
+      rows: detail.actors.largest.map(a => [a.name, a.type, fmtBytes(a.bytes), a.items])
+    });
+  }
+  if ( detail.settings ) {
+    tables.push({
+      caption: "World settings by package", head: ["Package", "Size", "Settings"],
+      rows: detail.settings.byPackage.map(g => [g.key, fmtBytes(g.bytes), g.count])
+    });
+  }
+  return tables;
 }
 
 /** Browser invoker names can embed whole data: URIs (an image's onload); keep them readable. */
