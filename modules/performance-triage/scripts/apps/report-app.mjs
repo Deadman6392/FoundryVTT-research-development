@@ -26,6 +26,7 @@ export class ReportApp extends ApplicationV2 {
       recordProfile: ReportApp.#onRecordProfile,
       benchmarkActors: ReportApp.#onBenchmarkActors,
       measureFrameCost: ReportApp.#onMeasureFrameCost,
+      useLowProfile: ReportApp.#onUseLowProfile,
       openProfiles: () => game.modules.get(MODULE_ID).api.openProfiles()
     }
   };
@@ -116,6 +117,17 @@ export class ReportApp extends ApplicationV2 {
     await benchmarkActors();
     this.#open.add("world");
     return this.#refresh();
+  }
+
+  /** The same as choosing Low under "My performance profile": this computer only, undone by choosing another. */
+  static async #onUseLowProfile() {
+    await game.settings.set(MODULE_ID, "selfProfile", "low");
+    const reload = await DialogV2.confirm({
+      window: { title: game.i18n.localize("PTRIAGE.Reload.Title") },
+      content: `<p>${game.i18n.localize("PTRIAGE.Report.LowProfileSet")}</p>`,
+      rejectClose: false
+    });
+    if ( reload ) foundry.utils.debouncedReload();
   }
 
   static async #onMeasureFrameCost(event, target) {

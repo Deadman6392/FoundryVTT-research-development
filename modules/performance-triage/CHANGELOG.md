@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1
+
+- Findings now carry the button for their next step: turn on the hook profiler for a freeze around ready, time actor
+  preparation for a freeze before setup, use the Low profile or measure layer costs for a low frame rate. Buttons
+  disappear once that step has been done. Previously these lived in collapsed sections below the findings.
+- The load time shared with the GM now counts until the ready handlers finish, not when the ready hook started.
+
 ## 0.2.0
 
 Changes driven by the first real report from a heavy dnd5e world (158 modules, Intel HD 4600):

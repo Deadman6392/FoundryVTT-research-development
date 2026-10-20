@@ -29,6 +29,14 @@ export const OVERLAPPING_PACKAGES = {
     + "its listing describes it as experimental"
 };
 
+/** The button that answers what a startup freeze contains. */
+function freezeAction(phases, can) {
+  if ( phases.includes("ready") ) return can.hookProfiler;
+  if ( phases.includes("canvasReady") || phases.includes("canvasInit") ) return can.layerCosts;
+  if ( phases.includes("setup") ) return can.actorTiming;
+  return can.hookProfiler;
+}
+
 /** What a startup freeze most likely contains, from the phases it spans. */
 function explainFreeze(phases) {
   if ( phases.includes("ready") ) {
@@ -47,7 +55,16 @@ function explainFreeze(phases) {
 
 export function recommend(report) {
   const out = [];
-  const add = (severity, area, title, detail, fix) => out.push({ severity, area, title, detail, fix });
+  // actions: buttons the report shows on the finding, so the next step is one click away
+  const add = (severity, area, title, detail, fix, actions = []) => {
+    out.push({ severity, area, title, detail, fix, actions: actions.filter(Boolean) });
+  };
+  const can = {
+    hookProfiler: !report.hookProfilerEnabled && { id: "toggleHookProfiler", label: "Turn on the hook profiler (reloads)" },
+    actorTiming: !report.prep && report.world && { id: "benchmarkActors", label: "Time actor preparation" },
+    layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
+    lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" }
+  };
 
   // Debug output left enabled is the cheapest big win there is
   for ( const d of report.modules?.debug ?? [] ) {
@@ -150,7 +167,7 @@ export function recommend(report) {
     add("high", "Startup", `The page froze for ${secs(frame.duration)} in one block during startup`,
       `From ${secs(frame.start)} to ${secs(frame.start + frame.duration)} after page load`
       + (phases.length ? `, spanning ${phases.join(", ")}` : "") + ". " + explainFreeze(phases),
-      "");
+      "", [freezeAction(phases, can)]);
   }
 
   // Modules
@@ -260,7 +277,7 @@ export function recommend(report) {
       "The canvas redraws every frame even when nothing moves, so a low rate while idle means the scene itself is too "
       + `heavy for this computer${mode ? ` at ${mode} performance mode` : ""}.`,
       "Choose the Low profile under My performance profile, then measure layer costs (Canvas section) to see what "
-      + "is left.");
+      + "is left.", [can.lowProfile, can.layerCosts]);
   }
 
   // Layer costs measured on this client
@@ -285,7 +302,8 @@ export function recommend(report) {
     const suggestion = suggestProfile(p.summary);
     if ( suggestion && (p.profile === "none") ) {
       add("medium", "Players", `${p.name} may need the ${suggestion} profile`,
-        describeSummary(p.summary), "Assign it in Performance Triage > Client Profiles.");
+        describeSummary(p.summary), "Assign it in Performance Triage > Client Profiles.",
+        [{ id: "openProfiles", label: "Client profiles" }]);
     }
   }
 

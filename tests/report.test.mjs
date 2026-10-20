@@ -185,3 +185,26 @@ test("timeline and headline use the settled time, not the moment the ready hook 
   assert.ok(html.includes("Time until usable"));
   assert.ok(html.includes("105.8 s"), "settled time shown in the headline");
 });
+
+test("findings carry the button for their next step, and drop it once that step is done", () => {
+  const report = heavyWorldReport();
+  report.world = { counts: {} };
+  report.canvas = { ready: true, textures: [], scene: {} };
+  report.hookProfilerEnabled = false;
+  let findings = recommend(report);
+  const ids = title => findings.find(f => f.title.startsWith(title)).actions.map(a => a.id);
+  assert.deepEqual(ids("The page froze for 42.9 s"), ["toggleHookProfiler"]);
+  assert.deepEqual(ids("The page froze for 22.7 s"), ["benchmarkActors"]);
+  assert.deepEqual(ids("This client renders about 18 fps"), ["useLowProfile", "measureFrameCost"]);
+
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("data-action=\"useLowProfile\""));
+
+  // After running the profiler, timing actors and measuring layers, those buttons go away
+  Object.assign(report, { hookProfilerEnabled: true, prep: { count: 1, totalMs: 1, actors: [] },
+    frameCost: { baseline: 18, baselineEnd: 18, stable: true, rows: [] } });
+  findings = recommend(report);
+  assert.deepEqual(ids("The page froze for 42.9 s"), []);
+  assert.deepEqual(ids("The page froze for 22.7 s"), []);
+  assert.deepEqual(ids("This client renders about 18 fps"), ["useLowProfile"]);
+});
