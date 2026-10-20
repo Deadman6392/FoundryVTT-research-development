@@ -10,13 +10,24 @@ load and cheap to run: performance is a feature here, not a polish step.
   - `scripts/main.mjs` is the entry point; `scripts/lib/` holds pure logic with no Foundry globals.
   - `scripts/apps/` holds UI, always loaded with dynamic `import()` when opened.
 - `tests/` — `node:test` suites. `tests/helpers/foundry-mock.mjs` is a small Foundry stand-in for lifecycle tests.
-- `scripts/check.mjs` — static checks (manifest, syntax, localization keys, load budget).
+- `scripts/check.mjs` — static checks (manifest, syntax, localization keys, release URLs, load budget).
+- `scripts/package.mjs`, `scripts/set-version.mjs`, `scripts/lib/release.mjs` — release tooling.
 - `docs/` — GM-facing guides.
 
 ## Commands
 
 - `npm test` — all tests. Must pass before every commit.
-- `npm run check` — manifest/syntax/i18n checks and the eager-load budget. Must pass before every commit.
+- `npm run check` — manifest/syntax/i18n/release-URL checks and the eager-load budget. Must pass before every commit.
+- `npm run set-version -- <id> <x.y.z>` — bump a module's version and its download URL together.
+- `npm run package` — build `dist/<id>.zip` locally (CI does this on every push as a dry run).
+
+## Releasing
+
+Foundry installs from a module's `manifest` URL (its `module.json` on `main`, which must stay stable) and downloads the
+zip named in `download`. To release: run `npm run set-version`, commit, and merge to `main`. The `Release modules`
+workflow then publishes a GitHub release `<id>-v<version>` with `<id>.zip` and `module.json` attached. It skips versions
+that already have a release, so merging other changes never republishes. Never edit a published release's zip;
+release a new version instead.
 
 No dependencies or build step: modules ship as plain ES modules so the folder in the repo is exactly what Foundry runs.
 

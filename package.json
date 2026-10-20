@@ -5,7 +5,9 @@
   "description": "Foundry VTT modules focused on performance, plus their tests and research notes.",
   "scripts": {
     "test": "node --test --test-reporter=spec \"tests/*.test.mjs\"",
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "package": "node scripts/package.mjs",
+    "set-version": "node scripts/set-version.mjs"
   },
   "engines": {
     "node": ">=22"
