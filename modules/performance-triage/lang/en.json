@@ -1,0 +1,81 @@
+{
+  "PTRIAGE": {
+    "Profile": {
+      "none": {
+        "Name": "Unmanaged",
+        "Hint": "No changes. The player's own settings are used as-is."
+      },
+      "balanced": {
+        "Name": "Balanced",
+        "Hint": "Medium canvas quality, fewer chat messages rendered at startup, and a lower frame rate while idle or unfocused. Barely visible on a decent machine."
+      },
+      "low": {
+        "Name": "Low",
+        "Hint": "Low canvas quality, 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, and aggressive idle throttling. For integrated graphics and older laptops."
+      },
+      "minimum": {
+        "Name": "Minimum",
+        "Hint": "Everything in Low, plus a 20 fps cap, no mipmaps, no Sequencer effects, no FXMaster weather, and no cosmetic extras. For machines that struggle to run the map at all."
+      },
+      "nocanvas": {
+        "Name": "Theater of the Mind (no map)",
+        "Hint": "Turns the game canvas off entirely. Sheets, chat and rolls still work. Last resort for machines that cannot draw the map."
+      }
+    },
+    "Settings": {
+      "SelfProfile": {
+        "Name": "My performance profile",
+        "Hint": "Use the profile your GM assigned, or pick one yourself. Your previous settings are backed up and restored if you go back to Unmanaged.",
+        "FollowGM": "Use the GM's assignment"
+      },
+      "ShareSummary": {
+        "Name": "Share a performance summary with the GM",
+        "Hint": "Once per session, store this client's load time, frame rate, CPU thread count and GPU name on your user so the GM can see who is struggling. No other data is collected or sent anywhere."
+      }
+    },
+    "Menu": {
+      "Report": {
+        "Name": "Performance report",
+        "Label": "Open report",
+        "Hint": "See what is slowing this client down: load timeline, files per module, stutters, hook costs, GPU memory and recommendations."
+      },
+      "Profiles": {
+        "Name": "Client profiles",
+        "Label": "Manage profiles",
+        "Hint": "Assign performance profiles to players whose computers struggle."
+      }
+    },
+    "Reload": {
+      "Title": "Reload required",
+      "Now": "Reload now",
+      "Later": "Later",
+      "Assigned": "Your GM changed your performance profile to {profile}. Reload to apply it.",
+      "Applied": "Performance profile {profile} has been applied. Some changes only take effect after a reload."
+    },
+    "Notify": {
+      "Applied": "Performance profile {profile} applied.",
+      "ProfilerActive": "Performance Triage: the hook profiler is active on this client and adds a small overhead. Disable it from the performance report when you are done."
+    },
+    "Report": {
+      "Title": "Performance Triage",
+      "Copied": "Report copied to the clipboard as Markdown.",
+      "ProfilerOn": "The hook profiler will be active after a reload. Play normally for a while, then open the report again.",
+      "ProfilerOff": "The hook profiler will be removed after a reload.",
+      "Recording": "Recording a 20 second CPU profile. Keep playing normally.",
+      "RecordFailed": "The CPU profile could not be recorded. See the browser console for details."
+    },
+    "Profiles": {
+      "Title": "Client Performance Profiles",
+      "Intro": "Profiles change client-side display settings on that player's computer only. Nothing about the world changes, players can override the assignment in their own settings, and their original settings are restored when the profile is removed.",
+      "Default": "Default for players",
+      "UseDefault": "Use default",
+      "User": "User",
+      "Running": "Running",
+      "Suggested": "Suggested",
+      "Assigned": "Assigned",
+      "WhatTheyDo": "What each profile changes",
+      "Save": "Save assignments",
+      "Saved": "Profile assignments saved. Affected players are asked to reload."
+    }
+  }
+}
