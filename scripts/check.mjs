@@ -5,6 +5,7 @@
 import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import { join, relative, dirname, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import { releaseProblems } from "./lib/release.mjs";
 
 const ROOT = resolve(dirname(new URL(import.meta.url).pathname), "..");
 const MODULES = join(ROOT, "modules");
@@ -68,6 +69,7 @@ for ( const id of readdirSync(MODULES) ) {
     if ( !manifest[field] ) fail(where, `manifest is missing "${field}"`);
   }
   if ( manifest.scripts?.length ) fail(where, "use esmodules, not scripts");
+  for ( const problem of releaseProblems(manifest) ) fail(where, problem);
   for ( const p of [...(manifest.esmodules ?? []), ...(manifest.styles ?? []), ...(manifest.languages ?? []).map(l => l.path)] ) {
     if ( !existsSync(join(dir, p)) ) fail(where, `manifest references missing file ${p}`);
   }

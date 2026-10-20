@@ -1,0 +1,45 @@
+name: Release modules
+
+# Publishes a GitHub release "<id>-v<version>" with <id>.zip and module.json for every module whose current version
+# on main has not been released yet. Bump a version with `npm run set-version -- <id> <x.y.z>` and merge to main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - run: npm run check
+      - run: node scripts/package.mjs --out dist
+      - name: Publish unreleased versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for manifest in dist/*/module.json; do
+            id=$(node -p "require('./$manifest').id")
+            version=$(node -p "require('./$manifest').version")
+            title=$(node -p "require('./$manifest').title")
+            url=$(node -p "require('./$manifest').manifest")
+            tag="$id-v$version"
+            if gh release view "$tag" >/dev/null 2>&1; then
+              echo "$tag already released"
+              continue
+            fi
+            printf 'Install in Foundry: Add-on Modules > Install Module, then paste this manifest URL:\n\n%s\n' "$url" > notes.md
+            gh release create "$tag" "dist/$id.zip" "$manifest" \
+              --target "$GITHUB_SHA" --title "$title $version" --notes-file notes.md
+          done

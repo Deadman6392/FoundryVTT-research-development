@@ -30,9 +30,16 @@ each one changes.
 
 ## Install
 
-The repository is private, so Foundry cannot install it from a manifest URL yet. Copy the
-`modules/performance-triage` folder into your Foundry user data folder as `Data/modules/performance-triage`, restart
-Foundry, and enable the module in your world. Every player's client runs it once it's enabled in the world.
+In Foundry's setup screen, open *Add-on Modules > Install Module* and paste this manifest URL:
+
+```
+https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/performance-triage/module.json
+```
+
+Then enable the module in your world; every player's client runs it from then on. Foundry checks the same URL for
+updates.
+
+To run unreleased code instead, copy the `modules/performance-triage` folder to `Data/modules/performance-triage`.
 
 ## Use
 

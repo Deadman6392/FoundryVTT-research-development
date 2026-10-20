@@ -14,8 +14,14 @@ Foundry VTT modules focused on making a heavy dnd5e table run well on every play
 
 ## Installing a module
 
-Copy `modules/<module-id>` into your Foundry user data folder as `Data/modules/<module-id>`, restart Foundry, and enable
-it in your world.
+In Foundry's setup screen, open *Add-on Modules > Install Module* and paste the module's manifest URL:
+
+| Module | Manifest URL |
+| --- | --- |
+| Performance Triage | `https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/performance-triage/module.json` |
+
+Each version is published as a GitHub release (`<module-id>-v<version>`) containing the zip Foundry downloads.
+To run unreleased code, copy `modules/<module-id>` into your Foundry user data folder as `Data/modules/<module-id>`.
 
 ## Development
 
