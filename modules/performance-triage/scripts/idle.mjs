@@ -63,9 +63,16 @@ export class IdleThrottle {
     if ( this.throttled ) this.restore();
   }
 
+  /** Stop throttling while something else needs control of the frame cap (the layer cost measurement). */
+  suspend(suspended) {
+    this.suspended = suspended;
+    if ( suspended && this.throttled ) this.restore();
+    this.lastActivity = performance.now();
+  }
+
   check() {
     const ticker = this.ticker;
-    if ( !ticker ) return;
+    if ( !ticker || this.suspended ) return;
     if ( this.throttled ) {
       // Foundry reconfigured the ticker under us (e.g. a settings change); accept its value
       if ( ticker.maxFPS !== this.idleFps ) this.throttled = false;

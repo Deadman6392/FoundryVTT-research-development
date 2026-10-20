@@ -117,9 +117,10 @@ export class LongFrameAggregator {
       b.count++;
       b.duration += s.duration ?? 0;
       b.layout += s.forcedStyleAndLayoutDuration ?? 0;
+      // Invokers can contain whole data: URIs; keep stored strings short
       scripts.push({
-        key, duration: Math.round(s.duration ?? 0), invoker: s.invoker ?? "", type: s.invokerType ?? "",
-        fn: s.sourceFunctionName ?? ""
+        key, duration: Math.round(s.duration ?? 0), invoker: String(s.invoker ?? "").slice(0, 200),
+        type: s.invokerType ?? "", fn: String(s.sourceFunctionName ?? "").slice(0, 80)
       });
     }
     scripts.sort((a, b) => b.duration - a.duration);

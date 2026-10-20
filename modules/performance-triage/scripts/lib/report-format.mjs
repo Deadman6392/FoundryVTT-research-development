@@ -5,6 +5,7 @@
 import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { describeSummary } from "./recommend.mjs";
+import { settledAt } from "./frames.mjs";
 
 /* -------------------------------------------- */
 /*  Formatting helpers                          */
@@ -38,12 +39,20 @@ const pkg = key => {
 const PHASE_ORDER = [
   ["responseEnd", "Page received"], ["domInteractive", "Page parsed"], ["scriptEval", "Performance Triage loaded"],
   ["init", "init"], ["i18nInit", "i18nInit"], ["setup", "setup"], ["canvasInit", "canvasInit"],
-  ["canvasReady", "canvasReady (first scene drawn)"], ["ready", "ready"]
+  ["canvasReady", "canvasReady (first scene drawn)"], ["ready", "ready hook fired"],
+  ["readyComplete", "ready handlers finished"], ["settled", "Settled (no long freeze for 2 s)"]
 ];
 
+/** When startup really finished, counting freezes that continue right after the ready handlers. */
+export function settledTime(report) {
+  const frames = [...(report.longFrames?.load?.worst ?? []), ...(report.longFrames?.play?.worst ?? [])];
+  return settledAt(report.timeline?.marks?.readyComplete, frames);
+}
+
 /** Ordered startup phases with absolute time and time since the previous phase. */
-export function timelineRows(timeline) {
+export function timelineRows(timeline, settled = null) {
   const all = { ...(timeline?.navigation ?? {}), ...(timeline?.marks ?? {}) };
+  if ( Number.isFinite(settled) && (settled > (all.readyComplete ?? 0)) ) all.settled = settled;
   const rows = [];
   let previous = 0;
   for ( const [key, label] of PHASE_ORDER ) {
@@ -62,11 +71,12 @@ export function timelineRows(timeline) {
 /** Each section yields { title, intro?, tables: [{caption?, head, rows}], notes?, actions? } */
 function sections(report, opts = {}) {
   const out = [];
-  const tl = timelineRows(report.timeline);
+  const tl = timelineRows(report.timeline, settledTime(report));
   out.push({
     id: "timeline",
     title: "Startup timeline",
-    intro: "Milliseconds since the browser started loading the page. Large gaps point at the phase to investigate.",
+    intro: "Time since the browser started loading the page. Large gaps point at the phase to investigate. "
+      + "\"ready hook fired\" is when Foundry starts calling ready handlers; the game is usable once they finish.",
     tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) }]
   });
 
@@ -82,7 +92,9 @@ function sections(report, opts = {}) {
       id: "network",
       title: "Files loaded during startup",
       intro: `${t.count} files, ${fmtBytes(t.transfer)} over the network, ${fmtBytes(t.decoded)} after decompression. `
-        + `Protocols: ${protocols}.`,
+        + `Protocols: ${protocols}.`
+        + (report.network.truncated ? " Some early files (mostly stylesheets) are missing: the browser had already "
+          + "dropped their timings before this module loaded." : ""),
       tables: [
         { caption: "By package (largest first)", head, rows: [...(net.packages ?? []).slice(0, 20).map(row), ["Total", ...row(t).slice(1)]] },
         { caption: "Largest files", head: ["File", "Package", "Size", "Delivery"],
@@ -103,20 +115,22 @@ function sections(report, opts = {}) {
         rows: (data.packages ?? []).slice(0, 12).map(p => [pkg(p.key), p.count, fmtMs(p.duration), fmtMs(p.layout)])
       });
     }
-    const worst = lf.play?.worst?.length ? lf.play.worst : (lf.load?.worst ?? []);
+    const worst = [...(lf.load?.worst ?? []), ...(lf.play?.worst ?? [])].sort((a, b) => b.duration - a.duration);
     if ( worst.length ) {
       tables.push({
         caption: "Worst frames",
         head: ["At", "Length", "Phase", "Top scripts"],
-        rows: worst.slice(0, 8).map(f => [fmtMs(f.start), fmtMs(f.duration), f.phase,
-          f.scripts.map(s => `${pkg(s.key)} ${s.fn || s.invoker} ${s.duration} ms`).join("; ")])
+        rows: worst.slice(0, 10).map(f => [fmtMs(f.start), fmtMs(f.duration), f.phase,
+          f.scripts.map(s => `${pkg(s.key)} ${shortInvoker(s.fn || s.invoker)} ${s.duration} ms`).join("; ")])
       });
     }
     out.push({
       id: "longframes",
       title: "Long frames (stutters)",
       intro: lf.supported
-        ? "Frames that took over 50 ms, attributed to the script that started them. Needs no setup."
+        ? "Frames that took over 50 ms, attributed to the script that started them. Hooks and wrappers run inside "
+          + "Foundry's own code, so long frames often name core even when a module did the work; the hook profiler "
+          + "and actor timing break those down."
         : "This browser does not report long animation frames (Chrome, Edge and the Foundry desktop app do).",
       tables
     });
@@ -191,7 +205,8 @@ function sections(report, opts = {}) {
     ["Device pixel ratio", env.dpr], ["Renderer resolution", cl.rendererResolution ?? "–"],
     ["Performance mode", perf ? ["Low", "Medium", "High", "Maximum"][perf.mode] ?? perf.mode : "–"],
     ["Frame cap", perf ? (perf.fps || "uncapped") : "–"],
-    ["Measured frame rate", cl.fps ? `${cl.fps.achieved} fps (target ${cl.fps.target})` : "not measured yet"],
+    ["Measured frame rate", cl.fps ? `${cl.fps.achieved} fps over the first minute (target ${cl.fps.target})`
+      : (Number.isFinite(cl.liveFps) ? `${cl.liveFps} fps when this report opened` : "not measured yet")],
     ["Soft light edges / SMAA / MSAA / mipmaps", perf ? [perf.lightSoftEdges, perf.smaa, perf.msaa, perf.mipmap].map(String).join(" / ") : "–"]
   ];
   const tables = [{ caption: "This client", head: ["", ""], rows: gpuRows }];
@@ -211,7 +226,25 @@ function sections(report, opts = {}) {
       rows: cv.textures.slice(0, 10).map(t => [shortUrl(t.src), t.video ? `${t.kind} (video)` : t.kind, `${t.width}x${t.height}`, fmtBytes(t.bytes)])
     });
   }
-  out.push({ id: "canvas", title: "Canvas and GPU", tables });
+  const fc = report.frameCost;
+  if ( fc?.rows ) {
+    tables.push({
+      caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseline} fps with everything visible, `
+        + `${fc.baselineEnd} fps at the end${fc.stable ? "" : "; drifted, treat as rough"})`,
+      head: ["Hidden for the test", "Frame rate", "Time saved per frame"],
+      rows: fc.rows.map(r => [r.label, `${r.fps} fps`, `${r.atLimit ? "at least " : ""}${r.savedMs} ms`])
+    });
+  }
+  out.push({
+    id: "canvas",
+    title: "Canvas and GPU",
+    intro: cv?.ready
+      ? "\"Measure layer costs\" hides each part of the canvas for a few seconds and counts frames. It takes about "
+        + "30 seconds; the map will flicker, and nothing is saved or changed for anyone else."
+      : "",
+    tables,
+    actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (about 30 s)"]] : []
+  });
 
   // World
   const w = report.world;
@@ -241,7 +274,9 @@ function sections(report, opts = {}) {
   if ( m?.list ) {
     const t = [];
     if ( m.outdated?.length ) {
-      t.push({ caption: `Not verified for Foundry ${report.env?.generation}`, head: ["Module", "Version", "Verified for"],
+      t.push({ caption: `Modules with code not verified for Foundry ${report.env?.generation}`
+        + (m.outdatedContent ? ` (plus ${plural(m.outdatedContent, "content-only pack")}, which run no code)` : ""),
+        head: ["Module", "Version", "Verified for"],
         rows: m.outdated.map(x => [x.id, x.version, x.verified || "?"]) });
     }
     if ( m.debug?.length ) t.push({ caption: "Debug output enabled", head: ["Setting", "Value"], rows: m.debug.map(d => [d.label, JSON.stringify(d.value)]) });
@@ -263,6 +298,12 @@ function sections(report, opts = {}) {
     });
   }
   return out;
+}
+
+/** Browser invoker names can embed whole data: URIs (an image's onload); keep them readable. */
+function shortInvoker(text) {
+  const s = String(text ?? "").replace(/data:[^"'\])]{16,}/g, "data:…");
+  return s.length > 80 ? `${s.slice(0, 77)}...` : s;
 }
 
 function shortUrl(url) {
@@ -299,8 +340,12 @@ export function reportToHtml(report, opts = {}) {
   const load = report.network?.load?.total;
   const lfFrames = (report.longFrames?.load?.frames ?? 0) + (report.longFrames?.play?.frames ?? 0);
   const idle = report.profile?.idle;
+  const marks = report.timeline?.marks ?? {};
+  const usable = settledTime(report) ?? marks.readyComplete ?? marks.ready;
+  const fps = report.client?.fps?.achieved ?? report.client?.liveFps;
   const cards = [
-    ["Time to ready", fmtMs(report.timeline?.marks?.ready)],
+    ["Time until usable", fmtMs(usable)],
+    ["Frame rate", Number.isFinite(fps) ? `${fps} fps` : "–"],
     ["Files at startup", load ? `${load.count} (${fmtBytes(load.transfer)})` : "–"],
     ["Long frames", report.longFrames?.supported ? String(lfFrames) : "n/a"],
     ["Texture memory", report.canvas?.ready ? fmtBytes(report.canvas.textureMemory) : "–"],

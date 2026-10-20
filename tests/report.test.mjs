@@ -105,3 +105,83 @@ test("formatters", () => {
   assert.equal(fmtMs(2500), "2.5 s");
   assert.equal(esc(`<a href="x">'&'</a>`), "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
 });
+
+/** Shaped like a real report from a heavy dnd5e world on an older integrated GPU (names anonymized). */
+function heavyWorldReport() {
+  return {
+    env: { generation: 13, dpr: 1, memory: 16, cores: 8 },
+    profile: { id: "none", overridden: [] },
+    client: { liveFps: 18, maxFPS: 60, canvasPerformance: { mode: 2, fps: 60 } },
+    timeline: { marks: { init: 18273, i18nInit: 18762, setup: 41155, canvasReady: 54949, ready: 54981, readyComplete: 97800 } },
+    longFrames: {
+      supported: true,
+      load: { frames: 34, duration: 78540, blocking: 73567, packages: [], worst: [
+        { start: 54866, duration: 42926, phase: "load", scripts: [] },
+        { start: 18870, duration: 22682, phase: "load", scripts: [] },
+        { start: 49589, duration: 3021, phase: "load", scripts: [] }
+      ] },
+      play: { frames: 1, duration: 7506, blocking: 7456,
+        packages: [{ key: "module:data-compressor", count: 1, duration: 7464, layout: 0 }],
+        worst: [{ start: 98339, duration: 7506, phase: "play", scripts: [] }] }
+    },
+    modules: {
+      active: 158, outdatedContent: 33, debug: [],
+      outdated: [{ id: "old-code-module", version: "1.0", verified: "12" }],
+      list: [{ id: "potato-or-not" }, { id: "force-client-settings" }, { id: "data-compressor" }]
+    }
+  };
+}
+
+test("startup freezes are reported with the phases they span and what to do next", () => {
+  const findings = recommend(heavyWorldReport());
+  const freezes = findings.filter(f => f.area === "Startup");
+  assert.equal(freezes.length, 2, "only freezes over 5 s");
+  assert.match(freezes[0].title, /42\.9 s/);
+  assert.match(freezes[0].detail, /spanning canvasReady, ready.*hook profiler/);
+  assert.match(freezes[1].detail, /spanning setup.*Time actor preparation/);
+});
+
+test("low live frame rate with no profile recommends Low and names the performance mode", () => {
+  const f = recommend(heavyWorldReport()).find(x => x.title.startsWith("This client renders about 18 fps"));
+  assert.ok(f);
+  assert.equal(f.severity, "high");
+  assert.match(f.detail, /High performance mode/);
+});
+
+test("content-only packs are not counted as unverified code", () => {
+  const f = recommend(heavyWorldReport()).find(x => x.title.includes("not verified"));
+  assert.match(f.title, /^1 active module with code is/);
+  assert.match(f.detail, /33 content-only packs are also unverified/);
+});
+
+test("overlapping performance modules and overridden profile settings are flagged", () => {
+  const report = heavyWorldReport();
+  report.profile = { id: "low", overridden: [{ key: "core.performanceMode", wanted: 0, actual: 2 }] };
+  const findings = recommend(report);
+  const overlap = findings.find(f => f.title === "Other performance modules are active");
+  assert.match(overlap.detail, /potato-or-not.*force-client-settings/);
+  const drift = findings.find(f => f.title.startsWith("Something changed back"));
+  assert.match(drift.detail, /core\.performanceMode is 2, profile wants 0/);
+});
+
+test("measured layer costs become a finding with advice for the most expensive layer", () => {
+  const report = heavyWorldReport();
+  report.frameCost = { baseline: 18, baselineEnd: 18.5, stable: true, rows: [
+    { id: "primary", label: "Everything on the map", fps: 60, savedMs: 38.9, atLimit: true },
+    { id: "tokenFilters", label: "Token filters", fps: 31, savedMs: 23.3, atLimit: false },
+    { id: "tiles", label: "Tiles", fps: 20, savedMs: 5.6, atLimit: false },
+    { id: "interface", label: "Interface", fps: 18.5, savedMs: 1.5, atLimit: false }
+  ] };
+  const f = recommend(report).find(x => x.area === "Scene" && x.title.startsWith("What costs the most"));
+  assert.match(f.detail, /^Token filters: 23\.3 ms per frame; Tiles: 5\.6 ms per frame\.$/);
+  assert.match(f.fix, /Token Magic FX/);
+});
+
+test("timeline and headline use the settled time, not the moment the ready hook fired", () => {
+  const report = heavyWorldReport();
+  const rows = timelineRows(report.timeline, 105845);
+  assert.deepEqual(rows.slice(-3).map(r => r.label), ["ready hook fired", "ready handlers finished", "Settled (no long freeze for 2 s)"]);
+  const html = reportToHtml({ ...report, findings: [] });
+  assert.ok(html.includes("Time until usable"));
+  assert.ok(html.includes("105.8 s"), "settled time shown in the headline");
+});

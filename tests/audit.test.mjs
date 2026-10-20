@@ -39,6 +39,10 @@ game.modules.set("old-module", {
   id: "old-module", title: "Old", version: "1.0", active: true,
   compatibility: { verified: "11.315" }, packs: { size: 0 }, esmodules: { size: 1 }, scripts: { size: 0 }, styles: { size: 0 }
 });
+game.modules.set("old-map-pack", {
+  id: "old-map-pack", title: "Old maps", version: "1.0", active: true,
+  compatibility: { verified: "12" }, packs: { size: 2 }, esmodules: { size: 0 }, scripts: { size: 0 }, styles: { size: 0 }
+});
 game.modules.filter = fn => [...game.modules.values()].filter(fn);
 CONFIG.debug = { hooks: true, fog: { manager: false } };
 globalThis.navigator ??= {};
@@ -62,7 +66,10 @@ test("collectReport gathers world, module and debug data without a drawn canvas"
   assert.equal(report.world.counts.messages, 42);
   assert.equal(report.world.heavyActors[0].name, "Lich");
   assert.equal(report.world.packs.byPackage[0].key, "module:big-content");
-  assert.deepEqual(report.modules.outdated.map(m => m.id), ["old-module"]);
+  assert.deepEqual(report.modules.outdated.map(m => m.id), ["old-module"], "content-only packs are not code");
+  assert.equal(report.modules.outdatedContent, 1);
+  assert.equal(report.client.liveFps, null, "no live frame rate without a drawn canvas");
+  assert.deepEqual(report.profile.overridden, []);
   assert.deepEqual(report.modules.debug.map(d => d.label), ["CONFIG.debug.hooks", "midi-qol Debug setting"]);
   assert.ok(report.findings.some(f => f.title.includes("CONFIG.debug.hooks")));
   assert.ok(reportToHtml(report, {}).includes("Lich"));

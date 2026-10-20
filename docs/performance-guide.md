@@ -49,6 +49,9 @@ that need it. That's what Performance Triage does.
    you can add one header to your proxy, the *CPU profile* shows the complete picture including libWrapper wrappers.
 4. **Give weak computers a lighter client.** Under *Client profiles*, assign Balanced, Low or Minimum to the players
    who need it. Players who share their summary show measured frame rates and load times there, with a suggestion.
+   If a weak computer is still slow on a quiet scene, have that player run *Measure layer costs* in the report's
+   Canvas section. It shows how many milliseconds per frame tokens, token filters, tiles, lighting, fog and screen
+   filters each cost on their machine, so you know what to change on the scene.
 5. **Only now, decide about modules.** With numbers in hand, you can see whether a module's cost is worth its feature.
    Often it's one or two modules and a few settings, not "too many modules".
 
