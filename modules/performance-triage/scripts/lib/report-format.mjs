@@ -356,7 +356,8 @@ export function reportToHtml(report, opts = {}) {
   const findings = report.findings?.length
     ? `<ol class="ptriage-findings">${report.findings.map(f => `<li class="sev-${esc(f.severity)}">
         <span class="ptriage-badge">${esc(SEVERITY_LABEL[f.severity])}</span> <span class="ptriage-area">${esc(f.area)}</span>
-        <strong>${esc(f.title)}</strong><p>${esc(f.detail)}</p>${f.fix ? `<p class="ptriage-fix">${esc(f.fix)}</p>` : ""}</li>`).join("")}</ol>`
+        <strong>${esc(f.title)}</strong><p>${esc(f.detail)}</p>${f.fix ? `<p class="ptriage-fix">${esc(f.fix)}</p>` : ""}
+        ${htmlActions((f.actions ?? []).map(a => [a.id, a.label]))}</li>`).join("")}</ol>`
     : "<p>No findings. If the game still feels slow, enable the hook profiler and play for a while, then refresh.</p>";
 
   const body = sections(report, opts).map(s => `<details class="ptriage-section" data-section="${esc(s.id)}"${opts.open?.has(s.id) ? " open" : ""}>

@@ -160,7 +160,8 @@ async function shareSummary() {
     at: Date.now(),
     core: game.version,
     profile: state.profileId,
-    loadSeconds: Math.round((telemetry.marks.ready ?? 0) / 100) / 10,
+    // The ready hook fires before other modules' ready handlers run, so it can understate load time by half
+    loadSeconds: Math.round((telemetry.marks.readyComplete ?? telemetry.marks.ready ?? 0) / 100) / 10,
     fps,
     cores: navigator.hardwareConcurrency ?? null,
     memory: navigator.deviceMemory ?? null,
