@@ -11,13 +11,14 @@ import { createHookProfiler } from "./lib/hook-profiler.mjs";
 
 export const telemetry = {
   marks: {},
-  resources: { load: null, play: null },
+  resources: { load: null, play: null, truncated: false },
   longFrames: { supported: false, load: null, play: null },
   hookProfiler: null,
   payload: null,
   fps: null,
   sampler: null,
-  prep: null
+  prep: null,
+  frameCost: null
 };
 
 const PHASES = ["init", "i18nInit", "setup", "canvasInit", "canvasReady", "ready"];
@@ -59,7 +60,14 @@ export function bootstrap() {
   observeResources(origin);
   observeLongFrames(origin);
   for ( const phase of PHASES ) Hooks.once(phase, () => mark(phase));
+
+  // Our ready listener runs early, so the "ready" mark is when the hook started. This timeout runs once the whole
+  // task finishes: every other module's ready handler and anything else done synchronously after it.
+  Hooks.once("ready", () => setTimeout(() => mark("readyComplete"), 0));
 }
+
+/** Browsers keep at most this many resource entries until a script asks for more. */
+const DEFAULT_RESOURCE_BUFFER = 250;
 
 function observe(type, onEntry) {
   if ( !globalThis.PerformanceObserver?.supportedEntryTypes?.includes(type) ) return false;
@@ -76,6 +84,9 @@ function observe(type, onEntry) {
 }
 
 function observeResources(origin) {
+  // If the buffer filled before this module ran, entries for the earliest files (stylesheets, early scripts) are gone
+  const buffered = performance.getEntriesByType?.("resource")?.length ?? 0;
+  telemetry.resources.truncated = buffered >= DEFAULT_RESOURCE_BUFFER;
   const load = telemetry.resources.load = new ResourceAggregator(origin);
   const play = telemetry.resources.play = new ResourceAggregator(origin);
   observe("resource", e => {
@@ -112,6 +123,27 @@ export function rendererInfo() {
     maxTexture: gl.getParameter(gl.MAX_TEXTURE_SIZE),
     webgl2: (typeof WebGL2RenderingContext !== "undefined") && (gl instanceof WebGL2RenderingContext)
   };
+}
+
+/**
+ * Count frames the canvas actually renders over a short window. Ticker callbacks only run on frames that render,
+ * so this reflects what the player sees, including any frame cap.
+ * @param {number} ms
+ * @returns {Promise<number|null>}  Frames per second, or null without a drawn canvas
+ */
+export function countFps(ms) {
+  const ticker = globalThis.canvas?.ready ? canvas.app?.ticker : null;
+  if ( typeof ticker?.add !== "function" ) return Promise.resolve(null);
+  return new Promise(resolve => {
+    let frames = 0;
+    const count = () => frames++;
+    const start = performance.now();
+    ticker.add(count);
+    setTimeout(() => {
+      ticker.remove(count);
+      resolve(Math.round((frames * 10000) / (performance.now() - start)) / 10);
+    }, ms);
+  });
 }
 
 /**

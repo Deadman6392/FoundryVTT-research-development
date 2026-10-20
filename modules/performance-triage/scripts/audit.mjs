@@ -3,8 +3,12 @@
  * Every section is collected defensively so one missing API (a different core version, no canvas) never hides the rest.
  */
 import { MODULE_ID } from "./constants.mjs";
-import { telemetry, rendererInfo } from "./telemetry.mjs";
+import { telemetry, rendererInfo, countFps } from "./telemetry.mjs";
 import { recommend } from "./lib/recommend.mjs";
+import { PROFILES, valuesEqual, splitSettingKey } from "./lib/profiles.mjs";
+
+/** How long to count frames when the report opens before the one-minute startup sample has finished. */
+const LIVE_FPS_MS = 1500;
 
 const VIDEO_EXT = /\.(webm|mp4|m4v|ogv|mov)(\?|#|$)/i;
 const MAX_LISTENER_ROWS = 200;
@@ -27,6 +31,9 @@ export async function collectReport() {
   const hooks = telemetry.hookProfiler?.installed ? telemetry.hookProfiler.stats() : null;
   if ( hooks ) hooks.listeners = hooks.listeners.slice(0, MAX_LISTENER_ROWS);
 
+  // Counted before anything else so building the report doesn't skew it
+  const liveFps = telemetry.fps ? null : await countFps(LIVE_FPS_MS);
+
   const report = {
     generatedAt: new Date().toISOString(),
     env: safe(collectEnv, {}),
@@ -35,11 +42,16 @@ export async function collectReport() {
       applied: setting(MODULE_ID, "appliedProfile"),
       selfChoice: setting(MODULE_ID, "selfProfile"),
       idle: api.idle,
-      chatBatchSize: CONFIG.ChatMessage?.batchSize ?? null
+      chatBatchSize: CONFIG.ChatMessage?.batchSize ?? null,
+      overridden: safe(() => profileDrift(api.profileId), [])
     },
-    client: safe(collectClient, {}),
+    client: { ...safe(collectClient, {}), liveFps },
     timeline: safe(collectTimeline, {}),
-    network: { load: telemetry.resources.load?.toJSON(), play: telemetry.resources.play?.toJSON() },
+    network: {
+      load: telemetry.resources.load?.toJSON(),
+      play: telemetry.resources.play?.toJSON(),
+      truncated: telemetry.resources.truncated
+    },
     longFrames: {
       supported: telemetry.longFrames.supported,
       load: telemetry.longFrames.load?.toJSON(),
@@ -53,10 +65,23 @@ export async function collectReport() {
     world: safe(collectWorld),
     players: game.user.isGM ? safe(collectPlayers, []) : null,
     sampler: telemetry.sampler,
-    prep: telemetry.prep
+    prep: telemetry.prep,
+    frameCost: telemetry.frameCost
   };
   report.findings = recommend(report);
   return report;
+}
+
+/** Profile settings that no longer hold the profile's value, meaning something else changed them after we did. */
+function profileDrift(profileId) {
+  const drift = [];
+  for ( const [key, wanted] of Object.entries(PROFILES[profileId]?.settings ?? {}) ) {
+    const config = game.settings.settings.get(key);
+    if ( config?.scope !== "client" ) continue;
+    const actual = game.settings.get(...splitSettingKey(key));
+    if ( !valuesEqual(actual, wanted) ) drift.push({ key, wanted, actual });
+  }
+  return drift;
 }
 
 function collectEnv() {
@@ -200,8 +225,16 @@ function collectModules() {
     scripts: m.scripts?.size ?? 0,
     styles: m.styles?.size ?? 0
   }));
-  const outdated = generation ? list.filter(m => (verifiedGeneration(m.verified) ?? 0) < generation) : [];
-  return { active: list.length, list, outdated, debug: collectDebugFlags() };
+  const unverified = generation ? list.filter(m => (verifiedGeneration(m.verified) ?? 0) < generation) : [];
+  // Content packs (maps, compendiums) run no code, so an old "verified" field costs nothing at runtime
+  const hasCode = m => (m.esmodules + m.scripts) > 0;
+  return {
+    active: list.length,
+    list,
+    outdated: unverified.filter(hasCode),
+    outdatedContent: unverified.filter(m => !hasCode(m)).length,
+    debug: collectDebugFlags()
+  };
 }
 
 function collectWorld() {

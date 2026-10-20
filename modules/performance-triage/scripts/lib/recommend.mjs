@@ -5,13 +5,45 @@
  */
 import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
+import { phasesWithin } from "./frames.mjs";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
 const MB = 1024 * 1024;
 
 const mb = bytes => `${(bytes / MB).toFixed(1)} MB`;
 const ms = n => `${Math.round(n)} ms`;
+const secs = n => `${(n / 1000).toFixed(1)} s`;
 const name = key => splitKey(key).id;
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/**
+ * Other packages that also change how the client renders or stores data. Two tools changing the same settings end
+ * up with whichever ran last, and it's easy to lose track of which one is responsible for what.
+ * Descriptions are taken from each package's own listing.
+ */
+export const OVERLAPPING_PACKAGES = {
+  "potato-or-not": "asks each player how fast their computer is and sets graphics settings to match",
+  "force-client-settings": "lets the GM force or lock client settings for everyone",
+  "performance-optimizer": "applies per-player graphics presets (Foundry v14)",
+  "geanos-phantom-performance": "compresses actor, item and wall data in memory and decompresses it when accessed; "
+    + "its listing describes it as experimental"
+};
+
+/** What a startup freeze most likely contains, from the phases it spans. */
+function explainFreeze(phases) {
+  if ( phases.includes("ready") ) {
+    return "It contains the ready hook, so it is usually modules' ready handlers. Turn on the hook profiler and "
+      + "reload; its tables name the module and the hook.";
+  }
+  if ( phases.includes("canvasReady") || phases.includes("canvasInit") ) {
+    return "It happens while the scene is drawn. Measure layer costs (Canvas section) and check the largest textures.";
+  }
+  if ( phases.includes("setup") ) {
+    return "It ends at the setup hook. Just before setup, Foundry builds and prepares every world document, so use "
+      + "\"Time actor preparation\" in the World section to see whether world actors are the cause.";
+  }
+  return "Turn on the hook profiler and reload to attribute it.";
+}
 
 export function recommend(report) {
   const out = [];
@@ -111,15 +143,43 @@ export function recommend(report) {
       "Look for duplicated or leftover items and effects on these actors.");
   }
 
+  // Startup freezes: one task blocking the page for seconds, usually Foundry calling into modules
+  const marks = report.timeline?.marks ?? {};
+  for ( const frame of (report.longFrames?.load?.worst ?? []).filter(f => f.duration > 5000).slice(0, 3) ) {
+    const phases = phasesWithin(frame, marks);
+    add("high", "Startup", `The page froze for ${secs(frame.duration)} in one block during startup`,
+      `From ${secs(frame.start)} to ${secs(frame.start + frame.duration)} after page load`
+      + (phases.length ? `, spanning ${phases.join(", ")}` : "") + ". " + explainFreeze(phases),
+      "");
+  }
+
   // Modules
   const outdated = report.modules?.outdated ?? [];
   if ( outdated.length ) {
-    const count = outdated.length === 1 ? "1 active module is" : `${outdated.length} active modules are`;
+    const count = outdated.length === 1 ? "1 active module with code is" : `${outdated.length} active modules with code are`;
+    const content = report.modules.outdatedContent
+      ? ` (${plural(report.modules.outdatedContent, "content-only pack")} are also unverified, but they run no code.)`
+      : "";
     add("medium", "Modules", `${count} not verified for this Foundry version`,
       outdated.slice(0, 12).map(m => `${m.id} (verified ${m.verified || "?"})`).join(", ")
       + (outdated.length > 12 ? ", ..." : "")
-      + ". Unverified modules often hit deprecated APIs, which log warnings and run slower compatibility shims.",
+      + `. Unverified modules often hit deprecated APIs, which log warnings and run slower compatibility shims.${content}`,
       "Update them, or replace abandoned ones; check the browser console for deprecation warnings naming them.");
+  }
+  const active = new Set((report.modules?.list ?? []).map(m => m.id));
+  const overlapping = Object.entries(OVERLAPPING_PACKAGES).filter(([id]) => active.has(id));
+  if ( overlapping.length ) {
+    add("medium", "Modules", "Other performance modules are active",
+      overlapping.map(([id, what]) => `${id} ${what}`).join("; ") + ". When several tools change the same settings, "
+      + "the last one to run wins, and it gets hard to tell which change helped.",
+      "Pick one tool per job. Compare load time and long frames in this report with each one disabled.");
+  }
+  const drift = report.profile?.overridden ?? [];
+  if ( drift.length ) {
+    add("medium", "This client", `Something changed back ${plural(drift.length, "profile setting")}`,
+      drift.map(d => `${d.key} is ${JSON.stringify(d.actual)}, profile wants ${JSON.stringify(d.wanted)}`).join("; ")
+      + ". Another module, or a manual change, overrode the profile after it was applied.",
+      "Check Force Client Settings locks or other performance modules; the profile reapplies on the next load.");
   }
   if ( (report.modules?.active ?? 0) > 80 ) {
     add("info", "Modules", `${report.modules.active} modules are active`,
@@ -148,7 +208,7 @@ export function recommend(report) {
   const lfTop = (lf?.packages ?? []).filter(p => p.key.startsWith("module:") && (p.duration > 500)).slice(0, 5);
   if ( lfTop.length ) {
     add("medium", "Modules", "Modules that started long frames during play",
-      lfTop.map(p => `${name(p.key)}: ${ms(p.duration)} in ${p.count} scripts`).join("; "),
+      lfTop.map(p => `${name(p.key)}: ${ms(p.duration)} in ${plural(p.count, "script")}`).join("; "),
       "These scripts ran as the entry point of frames longer than 50 ms. The CPU profile gives a fuller picture.");
   }
 
@@ -191,11 +251,28 @@ export function recommend(report) {
 
   // This client
   const env = report.env ?? {};
-  const fps = report.client?.fps;
-  if ( fps?.achieved && fps.target && (fps.achieved < Math.min(fps.target, 60) * 0.5) && (report.profile?.id === "none") ) {
-    add("medium", "This client", `This client renders about ${Math.round(fps.achieved)} fps (target ${fps.target})`,
-      "The browser cannot keep up with the canvas at the current settings.",
-      "Choose the Low profile in this module's settings, or ask the GM to assign one.");
+  const cl = report.client ?? {};
+  const achieved = cl.fps?.achieved ?? cl.liveFps;
+  const target = cl.fps?.target ?? cl.canvasPerformance?.fps ?? cl.maxFPS;
+  if ( achieved && (achieved < Math.min(target || 60, 60) * 0.5) && (report.profile?.id === "none") ) {
+    const mode = ["Low", "Medium", "High", "Maximum"][cl.canvasPerformance?.mode ?? cl.performanceMode];
+    add("high", "This client", `This client renders about ${Math.round(achieved)} fps (target ${target || 60})`,
+      "The canvas redraws every frame even when nothing moves, so a low rate while idle means the scene itself is too "
+      + `heavy for this computer${mode ? ` at ${mode} performance mode` : ""}.`,
+      "Choose the Low profile under My performance profile, then measure layer costs (Canvas section) to see what "
+      + "is left.");
+  }
+
+  // Layer costs measured on this client
+  const fc = report.frameCost;
+  if ( fc?.rows?.length ) {
+    const costly = fc.rows.filter(r => r.savedMs >= 5 && (r.id !== "primary")).slice(0, 4);
+    if ( costly.length ) {
+      add("high", "Scene", `What costs the most to draw on this computer (baseline ${Math.round(fc.baseline)} fps)`,
+        costly.map(r => `${r.label}: ${r.atLimit ? "at least " : ""}${r.savedMs} ms per frame`).join("; ")
+        + (fc.stable ? "." : ". The frame rate drifted during the test, so treat these as rough."),
+        layerAdvice(costly[0].id));
+    }
   }
   if ( (env.dpr > 1) && report.client?.resolutionScaling && ((env.memory ?? 8) <= 8) ) {
     add("low", "This client", `Canvas renders at ${env.dpr}x pixel density`,
@@ -213,6 +290,25 @@ export function recommend(report) {
   }
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+const LAYER_ADVICE = {
+  tokenFilters: "Token Magic FX and similar filters redraw every frame. The Low profile stops animated ones; "
+    + "removing permanent filters (for example automatic wound effects) helps every client.",
+  tokens: "Many tokens with rings, effect icons, bars or filters add up. Hide or remove tokens not in play.",
+  tiles: "Large tile images (floors, roofs) are drawn every frame. Downscale them, and keep floors that aren't in "
+    + "use hidden.",
+  effects: "Lighting and vision quality depends on Foundry's performance mode. Try the Low profile (which switches "
+    + "to Low mode) and run this measurement again to see the difference.",
+  visibility: "Fog of war and vision masking scale with the scene size and number of vision sources.",
+  interface: "Token bars, nameplates, borders and drawings are redrawn every frame; modules that add HUD elements "
+    + "to tokens add to this.",
+  screenFilters: "Full-screen filters run over every pixel; anti-aliasing (SMAA, set by Foundry's performance mode) "
+    + "and weather effects are the usual ones. Try the Low profile and run this measurement again."
+};
+
+function layerAdvice(id) {
+  return LAYER_ADVICE[id] ?? "";
 }
 
 export function describeSummary(s) {

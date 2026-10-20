@@ -23,6 +23,11 @@ responsible, including inside libWrapper wrappers.
 **Actor preparation timing** (button in the report): re-prepares every world actor and lists the slowest. dnd5e
 preparation runs on every client at load and after every change to that actor.
 
+**Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
+filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
+one costs on this computer. It takes about 30 seconds, only changes what this client draws while it runs, and puts
+everything back afterwards. This is the tool for "low frame rate while nothing is moving".
+
 **Client profiles** (GM-assigned or self-chosen): Balanced, Low, Minimum and Theater of the Mind. Each changes this
 client's own display settings, lowers the number of chat messages rendered at startup, and lowers the canvas frame
 rate while idle or unfocused. See [the guide](../../docs/performance-guide.md#the-client-profiles) for exactly what
@@ -60,8 +65,8 @@ Macro access: `game.modules.get("performance-triage").api` exposes `openReport()
 
 It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
 
-- 9 small files (~43 KB unminified) load at startup, all in one parallel wave. The report, profile manager and CPU
-  sampler are loaded only when opened. No templates or stylesheets are fetched at startup.
+- 9 small files (~46 KB unminified) load at startup, all in one parallel wave. The report, profile manager, CPU
+  sampler and layer cost measurement are loaded only when opened. No templates or stylesheets are fetched at startup.
 - Always on: two `PerformanceObserver`s that only run when the browser already produced an entry (a file finished
   loading, or a frame took over 50 ms), folded into small aggregates immediately.
 - With a profile: one passive input listener that stores a timestamp, a dozen trivial hook listeners, and a

@@ -62,7 +62,9 @@
       "ProfilerOn": "The hook profiler will be active after a reload. Play normally for a while, then open the report again.",
       "ProfilerOff": "The hook profiler will be removed after a reload.",
       "Recording": "Recording a 20 second CPU profile. Keep playing normally.",
-      "RecordFailed": "The CPU profile could not be recorded. See the browser console for details."
+      "RecordFailed": "The CPU profile could not be recorded. See the browser console for details.",
+      "MeasuringLayers": "Measuring layer costs for about 30 seconds. The map will flicker; please don't move anything until it finishes.",
+      "MeasureFailed": "The layer cost measurement failed. See the browser console for details."
     },
     "Profiles": {
       "Title": "Client Performance Profiles",

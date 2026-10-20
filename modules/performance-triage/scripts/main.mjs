@@ -195,7 +195,9 @@ Hooks.once("init", () => {
     telemetry,
     get profileId() { return state.profileId; },
     get idle() { return state.idle?.status() ?? null; },
+    suspendIdle: suspended => state.idle?.suspend(suspended),
     collectReport: async () => (await import("./audit.mjs")).collectReport(),
+    measureFrameCost: async () => (await import("./frame-cost.mjs")).measureFrameCost(),
     recordCpuProfile: async seconds => (await import("./sampler.mjs")).recordProfile(seconds)
   };
 });

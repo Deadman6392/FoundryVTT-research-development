@@ -5,6 +5,7 @@ import { MODULE_ID, STORAGE_KEYS } from "../constants.mjs";
 import { telemetry, readStorageFlag, writeStorageFlag } from "../telemetry.mjs";
 import { collectReport, benchmarkActors } from "../audit.mjs";
 import { samplerSupport, recordProfile } from "../sampler.mjs";
+import { measureFrameCost } from "../frame-cost.mjs";
 import { reportToHtml, reportToMarkdown } from "../lib/report-format.mjs";
 import { injectStyle } from "./style.mjs";
 
@@ -24,6 +25,7 @@ export class ReportApp extends ApplicationV2 {
       resetHooks: ReportApp.#onResetHooks,
       recordProfile: ReportApp.#onRecordProfile,
       benchmarkActors: ReportApp.#onBenchmarkActors,
+      measureFrameCost: ReportApp.#onMeasureFrameCost,
       openProfiles: () => game.modules.get(MODULE_ID).api.openProfiles()
     }
   };
@@ -113,6 +115,22 @@ export class ReportApp extends ApplicationV2 {
     target.disabled = true;
     await benchmarkActors();
     this.#open.add("world");
+    return this.#refresh();
+  }
+
+  static async #onMeasureFrameCost(event, target) {
+    target.disabled = true;
+    ui.notifications.info(game.i18n.localize("PTRIAGE.Report.MeasuringLayers"));
+    // Get the window out of the way so the canvas is what's being measured
+    await this.minimize();
+    try {
+      await measureFrameCost();
+    } catch(err) {
+      ui.notifications.error(game.i18n.localize("PTRIAGE.Report.MeasureFailed"));
+      console.error(err);
+    }
+    await this.maximize();
+    this.#open.add("canvas");
     return this.#refresh();
   }
 }
