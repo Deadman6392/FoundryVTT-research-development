@@ -99,7 +99,8 @@ export function recommend(report) {
     hookProfiler: !report.hookProfilerEnabled && { id: "toggleHookProfiler", label: "Turn on the hook profiler (reloads)" },
     actorTiming: !report.prep && report.world && { id: "benchmarkActors", label: "Time actor preparation" },
     layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
-    lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" }
+    lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
+    scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -168,26 +169,34 @@ export function recommend(report) {
         + scenes.largest.slice(0, 5).map(x => `${x.name} ${mb(x.bytes)} (${x.tokens} tokens, ${x.walls} walls)`).join("; ")
         + ". Every scene in the world is sent to every client at load, including ones nobody is using.",
         "Export scenes the party isn't near to a compendium and delete them from the world; bring them back when "
-        + "needed. Links that point at an exported scene (journal links, teleport regions) need re-pointing after "
-        + "you bring it back.");
+        + "needed. Keep their IDs on the way out and back in, so journal links and teleport regions that point at "
+        + "them still work. The scene archive planner ranks scenes and lists what to prepare.",
+        [can.scenePlan]);
     }
     const tk = scenes?.tokens;
     const itemBytes = tk?.parts?.find(p => p.key === "items")?.bytes ?? 0;
     if ( tk && (itemBytes > 10 * MB) ) {
       const byActor = tk.byActor.filter(g => g.items).slice(0, 4)
         .map(g => `${g.actor ?? "a deleted actor"} (${plural(g.tokens, "token")}, ${mb(g.bytes)})`).join("; ");
-      const same = tk.same.items
-        ? ` ${tk.same.items} of those copies (${mb(tk.same.bytes)}) are identical to the sidebar actor's item apart `
-          + "from timestamps, so they add size without making the token any different."
+      // Older reports have no split between overrides and additions
+      const added = tk.added?.items ?? 0;
+      const overrides = tk.items - tk.same.items - added;
+      const split = tk.added
+        ? ` ${overrides} differ from the sidebar actor's version of the same item, ${added} are items the sidebar `
+          + `actor doesn't have, and ${tk.same.items} are identical to it apart from timestamps.`
+        : "";
+      const doubled = tk.added?.duplicates
+        ? ` ${tk.added.duplicates} of the added items share a name and type with an item the sidebar actor already `
+          + "has, so those tokens probably show that item twice."
         : "";
       add("high", "World", `Unlinked tokens store ${mb(itemBytes)} of their own item copies`,
-        `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${same} An `
-        + "unlinked token normally stores only what differs from its sidebar actor; a full set of copies is what "
-        + "is left after something rewrote every item on the token (a system migration or a bulk update by a "
-        + `module). Most of it belongs to: ${byActor}.`,
-        "Exporting scenes you aren't using removes their tokens' data from the load. On scenes you keep, deleting a "
-        + "token and placing a fresh one from the sidebar actor drops the copies, but also resets that token's HP, "
-        + "name and conditions, so do it for tokens that haven't been used yet.");
+        `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${split}${doubled} `
+        + "An unlinked token normally stores only what differs from its sidebar actor, so a full set of copies means "
+        + `each token carries its own version of every item. Most of it belongs to: ${byActor}.`,
+        "Archiving scenes you aren't using removes their tokens' data from the load. On scenes you keep, a token "
+        + "placed fresh from the sidebar actor carries no copies, but it is the sidebar actor's current version with "
+        + "HP, name and conditions reset, so only replace tokens the party hasn't met.",
+        [can.scenePlan]);
     }
     if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {
       add("low", "World", `${plural(tk.linkedDelta.tokens, "linked token")} still store ${mb(tk.linkedDelta.bytes)} of actor data`,

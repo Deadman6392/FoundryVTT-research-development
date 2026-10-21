@@ -281,7 +281,8 @@ function sections(report, opts = {}) {
     }
     out.push({
       id: "world", title: "World contents", tables: t,
-      actions: [["benchmarkActors", "Time actor preparation"]]
+      actions: [["benchmarkActors", "Time actor preparation"],
+        ...(report.env?.isGM ? [["openScenePlan", "Plan scene archiving"]] : [])]
     });
   }
 

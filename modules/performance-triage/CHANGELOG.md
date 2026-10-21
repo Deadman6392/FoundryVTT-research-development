@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0
+
+- **Scene archive planner** (GM only): ranks every scene by the world data it costs each player at load, totals it
+  by folder, and sorts scenes into archive with no prep, archive after prep (map notes that open journal entries, or
+  journal entries, macros or other scenes that link to it), small, and in use. Copies a Markdown prep checklist. It
+  reads the world and changes nothing. Opened from the settings menu, the report's World section, or the scene
+  findings.
+- Token item copies are split into copies that differ from the sidebar actor's item, items the sidebar actor doesn't
+  have, and identical copies; added items with the same name and type as a sidebar item are counted, since those
+  tokens probably show the item twice.
+- The archiving advice now says to keep IDs on export and import, so links to an archived scene work again when it
+  comes back.
+- The startup frame rate sample also drops intervals in which the idle throttle started and stopped again.
+- Actor timing yields to the browser every 50 ms instead of every 20 actors; token actors made those pauses ~0.8 s.
+
 ## 0.3.0
 
 Changes driven by player reports from the same heavy world:

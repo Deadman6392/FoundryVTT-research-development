@@ -156,7 +156,8 @@ export function countFps(ms) {
 
 /**
  * Sample the canvas frame rate for a short window after startup, skipping intervals in which the tab was hidden,
- * unfocused or throttled by the idle controller, so the number reflects what the player actually sees.
+ * unfocused or throttled by the idle controller, so the number reflects what the player actually sees. The throttle
+ * is checked on every frame too: it can start and end inside one interval, which would pull the average down.
  *
  * Frames are counted rather than read from `ticker.FPS`: PIXI 7's Ticker#update sets `elapsedMS` before it checks
  * the frame cap and returns early, so under a cap below the display rate `FPS` mostly reports skipped frames. A
@@ -169,8 +170,12 @@ export function sampleFps(isThrottled, { seconds = 60, every = 5 } = {}) {
     const values = [];
     let elapsed = 0;
     let frames = 0;
+    let throttledFrame = false;
     let ticker = null;
-    const count = () => frames++;
+    const count = () => {
+      frames++;
+      if ( isThrottled() ) throttledFrame = true;
+    };
     const currentTicker = () => {
       const t = globalThis.canvas?.ready ? canvas.app?.ticker : null;
       return (typeof t?.add === "function") ? t : null;
@@ -194,8 +199,9 @@ export function sampleFps(isThrottled, { seconds = 60, every = 5 } = {}) {
       const now = performance.now();
       const isUsable = usable();
       const switched = attach();
-      if ( ticker && !switched && wasUsable && isUsable ) values.push((frames * 1000) / (now - since));
+      if ( ticker && !switched && wasUsable && isUsable && !throttledFrame ) values.push((frames * 1000) / (now - since));
       frames = 0;
+      throttledFrame = false;
       since = now;
       wasUsable = isUsable;
       if ( elapsed < seconds ) return;

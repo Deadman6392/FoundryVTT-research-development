@@ -50,6 +50,15 @@ test("skips intervals that were throttled at either end", async () => {
   assert.ok(result.achieved > 20, `achieved ${result.achieved}`);
 });
 
+test("skips an interval when the throttle starts and ends inside it", async () => {
+  // Throttled from 0.6 s to 0.8 s: both ends of the 0.5-1.0 s interval look clean, but frames inside it were slowed
+  let throttled = false;
+  setTimeout(() => throttled = true, 600).unref();
+  setTimeout(() => throttled = false, 800).unref();
+  const result = await held(sampleFps(() => throttled, { seconds: 1.5, every: 0.5 }));
+  assert.equal(result.samples, 2, "0-0.5 s and 1.0-1.5 s count; 0.5-1.0 s does not");
+});
+
 test("returns null without a drawn canvas", async () => {
   canvas.ready = false;
   try {

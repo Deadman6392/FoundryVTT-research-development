@@ -234,6 +234,7 @@ test("freezes name what the hook profiler and actor timing found, instead of ask
 test("scene, settings and actor payload findings explain what is big", () => {
   const MB = 1024 * 1024;
   const report = heavyWorldReport();
+  report.env.isGM = true;
   report.payload = {
     sections: [{ key: "scenes", bytes: 105 * MB, count: 128 }, { key: "actors", bytes: 23 * MB, count: 377 }, { key: "settings", bytes: 7 * MB, count: 1299 }],
     packs: [],
@@ -243,7 +244,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
         tokens: {
           count: 1500, linked: 40, unlinked: 1460, deltaBytes: 80 * MB, items: 52000, withItems: 1200,
           parts: [{ key: "items", bytes: 78 * MB }, { key: "system", bytes: 2 * MB }],
-          same: { items: 50000, bytes: 75 * MB }, linkedDelta: { tokens: 6, bytes: 3 * MB }, missingActor: { tokens: 0, bytes: 0 },
+          same: { items: 50000, bytes: 75 * MB }, added: { items: 1000, duplicates: 300 }, linkedDelta: { tokens: 6, bytes: 3 * MB }, missingActor: { tokens: 0, bytes: 0 },
           largest: [{ scene: "Vallaki", name: "Guard", linked: false, bytes: MB, delta: MB, items: 60, same: 60, effects: 0 }],
           byActor: [{ actor: "Vistani Bandit", tokens: 40, bytes: 20 * MB, items: 2400, same: 2400 }, { actor: null, tokens: 3, bytes: MB, items: 90, same: 0 }]
         } },
@@ -256,7 +257,8 @@ test("scene, settings and actor payload findings explain what is big", () => {
   const scenes = findings.find(f => f.title.startsWith("Scenes are 105.0 MB"));
   assert.match(scenes.detail, /tokens 90\.0 MB.*own actor data \(their "delta"\) is 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
   const copies = findings.find(f => f.title === "Unlinked tokens store 78.0 MB of their own item copies");
-  assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 50000 of those copies \(75\.0 MB\) are identical/);
+  assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 1000 differ from the sidebar actor's version of the same item, 1000 are items the sidebar actor doesn't have, and 50000 are identical to it apart from timestamps\. 300 of the added items share a name and type/);
+  assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan"], "the GM gets the planner button");
   assert.match(copies.detail, /Vistani Bandit \(40 tokens, 20\.0 MB\); a deleted actor \(3 tokens, 1\.0 MB\)/);
   assert.ok(findings.some(f => f.title === "6 linked tokens still store 3.0 MB of actor data"));
   assert.match(findings.find(f => f.title.startsWith("World settings are")).detail,

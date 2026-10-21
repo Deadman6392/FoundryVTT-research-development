@@ -101,3 +101,23 @@ test("measurePayload names the largest individual world settings", () => {
     ["autoanimations.aaAutorec-melee", "beneos-module.cache", "autoanimations.version"]);
 });
 
+test("token item copies are split into matching, differing and added items, and doubled names are counted", () => {
+  const claw = { _id: "i1", name: "Claw", type: "weapon", system: { damage: "1d6" } };
+  const bite = { _id: "i2", name: "Bite", type: "weapon", system: { damage: "1d8" } };
+  const actors = [{ _id: "a1", name: "Ghoul", items: [claw, bite] }];
+  const tokens = [
+    { _id: "t1", name: "Ghoul", actorId: "a1", actorLink: false, delta: { items: [
+      { ...claw },                                          // identical
+      { ...bite, system: { damage: "2d8" } },               // differs: an override
+      { _id: "i9", name: "Claw", type: "weapon", system: {} }, // added, same name and type as a base item: shown twice
+      { _id: "i8", name: "Rope", type: "loot", system: {} }  // added, new
+    ] } },
+    // Without its sidebar actor nothing can be compared; these items are counted but not classified
+    { _id: "t2", name: "Lost", actorId: "gone", actorLink: false, delta: { items: [{ _id: "x", name: "Claw", type: "weapon" }] } }
+  ];
+  const t = measurePayload({ actors, scenes: [{ _id: "s1", name: "Crypt", tokens }] }).detail.scenes.tokens;
+  assert.equal(t.items, 5);
+  assert.equal(t.same.items, 1);
+  assert.deepEqual(t.added, { items: 2, duplicates: 1 });
+});
+

@@ -43,6 +43,11 @@
         "Name": "Client profiles",
         "Label": "Manage profiles",
         "Hint": "Assign performance profiles to players whose computers struggle."
+      },
+      "ScenePlan": {
+        "Name": "Scene archive planner",
+        "Label": "Plan scene archiving",
+        "Hint": "Rank scenes by how much world data they cost every player at load, and list what to prepare before moving them to a compendium."
       }
     },
     "Reload": {
@@ -79,6 +84,10 @@
       "WhatTheyDo": "What each profile changes",
       "Save": "Save assignments",
       "Saved": "Profile assignments saved. Affected players are asked to reload."
+    },
+    "ScenePlan": {
+      "Title": "Scene archive planner",
+      "Copied": "Prep checklist copied to the clipboard."
     }
   }
 }

@@ -38,6 +38,11 @@ async function openProfiles() {
   return ProfilesApp.open();
 }
 
+async function openScenePlan() {
+  const { ScenePlanApp } = await import("./apps/scene-plan-app.mjs");
+  return ScenePlanApp.open();
+}
+
 /** Settings menus need a class at registration time; these stand-ins load the real application on demand. */
 const { ApplicationV2 } = foundry.applications.api;
 
@@ -51,6 +56,13 @@ class ReportLauncher extends ApplicationV2 {
 class ProfilesLauncher extends ApplicationV2 {
   render() {
     openProfiles();
+    return this;
+  }
+}
+
+class ScenePlanLauncher extends ApplicationV2 {
+  render() {
+    openScenePlan();
     return this;
   }
 }
@@ -147,6 +159,14 @@ function registerSettings() {
     type: ProfilesLauncher,
     restricted: true
   });
+  game.settings.registerMenu(MODULE_ID, "scenePlan", {
+    name: "PTRIAGE.Menu.ScenePlan.Name",
+    label: "PTRIAGE.Menu.ScenePlan.Label",
+    hint: "PTRIAGE.Menu.ScenePlan.Hint",
+    icon: "fa-solid fa-box-archive",
+    type: ScenePlanLauncher,
+    restricted: true
+  });
 }
 
 /* -------------------------------------------- */
@@ -193,6 +213,7 @@ Hooks.once("init", () => {
   game.modules.get(MODULE_ID).api = {
     openReport,
     openProfiles,
+    openScenePlan,
     telemetry,
     get profileId() { return state.profileId; },
     get idle() { return state.idle?.status() ?? null; },

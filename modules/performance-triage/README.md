@@ -20,8 +20,16 @@ data at startup. Turn it on for a session, read the tables, turn it off.
 [docs/hosting.md](../../docs/hosting.md)), records 20 seconds of real CPU samples and charges time to the module
 responsible, including inside libWrapper wrappers.
 
-**Actor preparation timing** (button in the report): re-prepares every world actor and lists the slowest. dnd5e
-preparation runs on every client at load and after every change to that actor.
+**Actor preparation timing** (button in the report): re-prepares every world actor, and the actor of every unlinked
+token on every scene, and lists the slowest. dnd5e preparation runs on every client at load and after every change to
+that actor.
+
+**Scene archive planner** (GM only, *Configure Settings > Performance Triage > Plan scene archiving*, or the button on
+the report's scene findings): ranks every scene by how much world data it costs each player at load, groups them by
+folder, and sorts them into "archive with no prep", "archive after prep" (the scene has map notes that open journal
+entries, or other journals, macros or scenes link to it), "small, leave it" and "in use now". **Copy prep checklist**
+puts the plan in your clipboard as a Markdown checklist. It reads the world and changes nothing; the archiving itself
+is done with Foundry's own Export to Compendium, keeping IDs so links still work when a scene comes back.
 
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
@@ -51,7 +59,9 @@ To run unreleased code instead, copy the `modules/performance-triage` folder to 
 1. *Configure Settings > Performance Triage > Open report.* Read the findings at the top.
 2. To find expensive modules, expand **Hook listener profiler** and click **Enable profiler (reload)**. Play normally
    for a while, then reopen the report. Disable it again when you are done.
-3. *Configure Settings > Performance Triage > Manage profiles* (GM only) to assign profiles. Players who have
+3. *Configure Settings > Performance Triage > Plan scene archiving* (GM only) when the world data is large; see
+   [Shrinking the world data](../../docs/performance-guide.md#shrinking-the-world-data).
+4. *Configure Settings > Performance Triage > Manage profiles* (GM only) to assign profiles. Players who have
    **Share a performance summary with the GM** on (the default) show their measured frame rate, load time and hardware
    there, with a suggested profile.
 
@@ -59,14 +69,14 @@ Players can always choose their own profile, or go back to *Unmanaged*, under *M
 settings are backed up the first time a profile changes them and restored exactly when it no longer does.
 
 Macro access: `game.modules.get("performance-triage").api` exposes `openReport()`, `openProfiles()`,
-`collectReport()` (returns the report object) and `recordCpuProfile(seconds)`.
+`openScenePlan()`, `collectReport()` (returns the report object) and `recordCpuProfile(seconds)`.
 
 ## Cost of this module
 
 It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
 
-- 9 small files (~46 KB unminified) load at startup, all in one parallel wave. The report, profile manager, CPU
-  sampler and layer cost measurement are loaded only when opened. No templates or stylesheets are fetched at startup.
+- 9 small files (~47 KB unminified) load at startup, all in one parallel wave. The report, profile manager, scene
+  archive planner, CPU sampler and layer cost measurement are loaded only when opened. No templates or stylesheets are fetched at startup.
 - Always on: two `PerformanceObserver`s that only run when the browser already produced an entry (a file finished
   loading, or a frame took over 50 ms), folded into small aggregates immediately.
 - For the first minute after loading (when summary sharing is on): a frame counter on the canvas ticker, one
