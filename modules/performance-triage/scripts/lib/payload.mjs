@@ -42,7 +42,7 @@ class TokenStats {
     this.items = 0;
     this.withItems = 0;
     this.same = { items: 0, bytes: 0 };
-    this.added = { items: 0, duplicates: 0 };
+    this.added = { items: 0, duplicates: 0, examples: [] };
     this.linkedDelta = { tokens: 0, bytes: 0 };
     this.missingActor = { tokens: 0, bytes: 0 };
     this.largest = new TopN(10, t => t.bytes);
@@ -71,6 +71,7 @@ class TokenStats {
     let items = 0;
     let same = 0;
     let effects = 0;
+    const doubled = [];
     for ( const [key, value] of Object.entries(token ?? {}) ) {
       if ( (key !== "delta") || !value || (typeof value !== "object") ) {
         bytes += safeSize(value) + key.length + 3;
@@ -91,7 +92,10 @@ class TokenStats {
             const baseJson = base.byId.get(item?._id);
             if ( baseJson === undefined ) {
               this.added.items++;
-              if ( base.names.has(`${item?.type}:${item?.name}`) ) this.added.duplicates++;
+              if ( base.names.has(`${item?.type}:${item?.name}`) ) {
+                this.added.duplicates++;
+                doubled.push(item?.name ?? "");
+              }
             } else if ( json && (baseJson === json) ) {
               same++;
               this.same.bytes += itemSize;
@@ -106,6 +110,10 @@ class TokenStats {
         this.parts.set(part, (this.parts.get(part) ?? 0) + size);
       }
       bytes += delta + key.length + 3;
+    }
+    // A few examples are enough for the GM to open those tokens and check
+    if ( doubled.length && (this.added.examples.length < 10) ) {
+      this.added.examples.push({ scene: sceneName, token: token?.name ?? "", items: [...new Set(doubled)].slice(0, 5) });
     }
     this.deltaBytes += delta;
     this.items += items;

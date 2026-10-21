@@ -115,6 +115,21 @@ function observeLongFrames(origin) {
   telemetry.longFrames.play = play;
 }
 
+/** Page navigation timings and this module's startup marks, rounded to whole milliseconds. */
+export function timelineSnapshot() {
+  const nav = performance.getEntriesByType?.("navigation")?.[0];
+  const round = n => (Number.isFinite(n) ? Math.round(n) : null);
+  return {
+    navigation: nav ? {
+      responseEnd: round(nav.responseEnd),
+      domInteractive: round(nav.domInteractive),
+      domContentLoaded: round(nav.domContentLoadedEventEnd),
+      load: round(nav.loadEventEnd)
+    } : null,
+    marks: Object.fromEntries(Object.entries(telemetry.marks).map(([k, v]) => [k, round(v)]))
+  };
+}
+
 /** GPU and WebGL limits of this client, or an empty object when the canvas is not running. */
 export function rendererInfo() {
   const gl = globalThis.canvas?.app?.renderer?.gl;

@@ -8,5 +8,6 @@ export const SELF_KEY = `module:${MODULE_ID}`;
  * outside the settings API. The colon keeps them from looking like a "namespace.key" setting.
  */
 export const STORAGE_KEYS = {
-  hookProfiler: `${MODULE_ID}:hookProfiler`
+  hookProfiler: `${MODULE_ID}:hookProfiler`,
+  history: `${MODULE_ID}:history`
 };

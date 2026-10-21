@@ -244,7 +244,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
         tokens: {
           count: 1500, linked: 40, unlinked: 1460, deltaBytes: 80 * MB, items: 52000, withItems: 1200,
           parts: [{ key: "items", bytes: 78 * MB }, { key: "system", bytes: 2 * MB }],
-          same: { items: 50000, bytes: 75 * MB }, added: { items: 1000, duplicates: 300 }, linkedDelta: { tokens: 6, bytes: 3 * MB }, missingActor: { tokens: 0, bytes: 0 },
+          same: { items: 50000, bytes: 75 * MB }, added: { items: 1000, duplicates: 300, examples: [{ scene: "Vallaki", token: "Guard", items: ["Spear"] }] }, linkedDelta: { tokens: 6, bytes: 3 * MB }, missingActor: { tokens: 0, bytes: 0 },
           largest: [{ scene: "Vallaki", name: "Guard", linked: false, bytes: MB, delta: MB, items: 60, same: 60, effects: 0 }],
           byActor: [{ actor: "Vistani Bandit", tokens: 40, bytes: 20 * MB, items: 2400, same: 2400 }, { actor: null, tokens: 3, bytes: MB, items: 90, same: 0 }]
         } },
@@ -259,6 +259,14 @@ test("scene, settings and actor payload findings explain what is big", () => {
   const copies = findings.find(f => f.title === "Unlinked tokens store 78.0 MB of their own item copies");
   assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 1000 differ from the sidebar actor's version of the same item, 1000 are items the sidebar actor doesn't have, and 50000 are identical to it apart from timestamps\. 300 of the added items share a name and type/);
   assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan"], "the GM gets the planner button");
+  assert.match(copies.detail, /probably show that item twice: Guard on Vallaki \(Spear\)\./);
+  assert.match(copies.fix, /only replace tokens the party hasn't met/, "few additions: replacing is an option");
+
+  // In the measured world nearly every copy was an item the sidebar actor lacks: replacing tokens would lose them
+  report.payload.detail.scenes.tokens = { ...report.payload.detail.scenes.tokens, same: { items: 2, bytes: 1 },
+    added: { items: 51000, duplicates: 43, examples: [] } };
+  const own = recommend(report).find(f => f.title.startsWith("Unlinked tokens store"));
+  assert.match(own.fix, /Don't replace these tokens.*exist only on the tokens/);
   assert.match(copies.detail, /Vistani Bandit \(40 tokens, 20\.0 MB\); a deleted actor \(3 tokens, 1\.0 MB\)/);
   assert.ok(findings.some(f => f.title === "6 linked tokens still store 3.0 MB of actor data"));
   assert.match(findings.find(f => f.title.startsWith("World settings are")).detail,
@@ -289,3 +297,19 @@ test("the wait for world data is a timeline phase, a headline number and a findi
   const html = reportToHtml({ ...report, findings });
   assert.ok(html.includes("Waiting for the server") && html.includes("9.7 s"));
 });
+
+test("a known listener in a freeze gets an explanation, and leftover textures are told apart from the scene's", () => {
+  const report = heavyWorldReport();
+  report.hooks = { installed: true, windowMs: 60000, packages: [],
+    listeners: [{ pkg: "module:sequencer", hook: "ready", calls: 1, self: 10104, max: 10104 }] };
+  report.timeline = { marks: { ready: 24829, readyComplete: 36016 } };
+  report.longFrames.load.worst = [{ start: 24800, duration: 11213, phase: "load", scripts: [] }];
+  report.canvas = { ready: true, textureMemory: 9.8 * 1024 * 1024 * 1024, sceneTextureMemory: 160 * 1024 * 1024, textures: [] };
+  const findings = recommend(report);
+  const freeze = findings.find(f => f.title.startsWith("The page froze for 11.2 s"));
+  assert.match(freeze.detail, /sequencer's ready handler at 10\.1 s.*on the GM only, that reads every token's actor on every scene/);
+  const tex = findings.find(f => f.title.startsWith("Textures use about"));
+  assert.match(tex.detail, /This scene's own images are about 160\.0 MB; the rest are textures kept from scenes/);
+  assert.match(tex.fix, /reload to free it/);
+});
+

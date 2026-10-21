@@ -3,7 +3,8 @@
  * Every section is collected defensively so one missing API (a different core version, no canvas) never hides the rest.
  */
 import { MODULE_ID } from "./constants.mjs";
-import { telemetry, rendererInfo, countFps } from "./telemetry.mjs";
+import { telemetry, rendererInfo, countFps, timelineSnapshot } from "./telemetry.mjs";
+import { readHistory } from "./history.mjs";
 import { recommend } from "./lib/recommend.mjs";
 import { PROFILES, valuesEqual, splitSettingKey } from "./lib/profiles.mjs";
 
@@ -66,7 +67,8 @@ export async function collectReport() {
     players: game.user.isGM ? safe(collectPlayers, []) : null,
     sampler: telemetry.sampler,
     prep: telemetry.prep,
-    frameCost: telemetry.frameCost
+    frameCost: telemetry.frameCost,
+    history: safe(readHistory, [])
   };
   report.findings = recommend(report);
   return report;
@@ -117,17 +119,7 @@ function collectClient() {
 }
 
 function collectTimeline() {
-  const nav = performance.getEntriesByType?.("navigation")?.[0];
-  const round = n => (Number.isFinite(n) ? Math.round(n) : null);
-  return {
-    navigation: nav ? {
-      responseEnd: round(nav.responseEnd),
-      domInteractive: round(nav.domInteractive),
-      domContentLoaded: round(nav.domContentLoadedEventEnd),
-      load: round(nav.loadEventEnd)
-    } : null,
-    marks: Object.fromEntries(Object.entries(telemetry.marks).map(([k, v]) => [k, round(v)]))
-  };
+  return timelineSnapshot();
 }
 
 /** Width/height/bytes of a placeable's texture, deduplicated by source. */
@@ -166,6 +158,7 @@ function collectCanvas() {
     ready: true,
     textureMemory: Number.isFinite(loaderUsage) ? loaderUsage : estimated,
     textureMemorySource: Number.isFinite(loaderUsage) ? "TextureLoader" : "estimate",
+    sceneTextureMemory: estimated,
     textures: textures.slice(0, 15),
     scene: {
       name: scene.name,
@@ -314,13 +307,14 @@ function timeReset(actor) {
 
 /**
  * Re-prepare every world actor, and the actor of every unlinked token on every scene, and time it. actor.reset()
- * re-derives data exactly as an update does (dnd5e relies on this), so the results reflect what every client pays
- * at load and after each change to that actor.
+ * re-derives data exactly as an update does (dnd5e relies on this). World actors are prepared on every client at
+ * load and after each change to them.
  *
- * v14 defers unlinked tokens' actors until first use; TokenDocument#isLazyDelta and _preventActorDeltaAccess ("prevents
- * ActorDelta documents from materializing until after all world documents are first initialized") exist only in
- * the v14 API, so on v13 they are built with the world. On v14, tokens not built yet are skipped: timing them would
- * build them, and they cost nothing at load.
+ * Unlinked tokens' actors are not all built at load. Archiving 400 of 1,150 tokens in a v13 world barely changed the
+ * world build (9.9 s to 9.2 s), while Sequencer's GM-only ready handler, whose migration check reads `token.actor`
+ * for every token on every scene, fell from 16.6 s to 10.1 s. So a token's actor costs time when something first
+ * reads it: drawing its scene, or a module that walks every token. On v14, tokens whose delta isn't materialized yet
+ * (TokenDocument#isLazyDelta, v14 API only) are skipped, since timing them would build them.
  * Yields to the event loop periodically so the UI stays responsive on large worlds.
  */
 export async function benchmarkActors() {

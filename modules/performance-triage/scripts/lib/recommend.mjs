@@ -38,6 +38,16 @@ function freezeAction(phases, can) {
   return can.hookProfiler;
 }
 
+/**
+ * What some listeners that showed up in real reports are doing, read from each module's own source, keyed by
+ * "package/hook". Added to a freeze finding when the hook profiler names that listener.
+ */
+const KNOWN_LISTENERS = {
+  "module:sequencer/ready": "Sequencer's ready handler runs a migration check, on the GM only, that reads every token's "
+    + "actor on every scene (src/migrations.js), so it grows with the number of tokens in the world: in one world it "
+    + "fell from 16.6 s to 10.1 s when archiving took tokens from 1,150 to 751. Players don't run it."
+};
+
 /** Hooks whose listeners run inside each kind of startup freeze. */
 const FREEZE_HOOKS = {
   ready: ["ready", "canvasReady"],
@@ -59,16 +69,11 @@ function freezeCulprits(phases, report) {
   if ( listeners.length ) {
     notes.push("The hook profiler measured " + listeners.map(l => `${name(l.pkg)}'s ${l.hook} handler at ${secs(l.max)}`)
       .join(", ") + ".");
+    for ( const l of listeners ) if ( KNOWN_LISTENERS[`${l.pkg}/${l.hook}`] ) notes.push(KNOWN_LISTENERS[`${l.pkg}/${l.hook}`]);
   }
   if ( (kind === "setup") && report.prep?.totalMs ) {
-    const tokens = report.prep.tokens;
-    const tokenNote = tokens?.count
-      ? ` and the actors of ${tokens.count} unlinked tokens on all scenes ${secs(tokens.totalMs)} (Foundry v13 builds `
-        + "these with their scenes at load)"
-      : "";
-    notes.push(`Re-preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer`
-      + `${tokenNote}, so actors account for roughly that much; the rest is most likely building scenes and other `
-      + "world documents.");
+    notes.push(`Re-preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer, `
+      + "so world actors account for roughly that much; the rest is building scenes and the other world documents.");
   }
   return notes.join(" ");
 }
@@ -185,18 +190,26 @@ export function recommend(report) {
         ? ` ${overrides} differ from the sidebar actor's version of the same item, ${added} are items the sidebar `
           + `actor doesn't have, and ${tk.same.items} are identical to it apart from timestamps.`
         : "";
+      const examples = (tk.added?.examples ?? []).slice(0, 4)
+        .map(e => `${e.token} on ${e.scene} (${e.items.join(", ")})`).join("; ");
       const doubled = tk.added?.duplicates
         ? ` ${tk.added.duplicates} of the added items share a name and type with an item the sidebar actor already `
-          + "has, so those tokens probably show that item twice."
+          + `has, so those tokens probably show that item twice${examples ? `: ${examples}` : ""}.`
         : "";
+      // When most copies are items the sidebar actor lacks, the tokens are the only place those items exist
+      const tokensOwnItems = tk.added && (added > tk.items / 2);
+      const fix = tokensOwnItems
+        ? "Archive scenes you aren't using; that removes their tokens' data from the load. Don't replace these tokens "
+          + "with fresh ones from the sidebar actors to save space: most of their items exist only on the tokens, so "
+          + "a fresh token would be missing them."
+        : "Archiving scenes you aren't using removes their tokens' data from the load. On scenes you keep, a token "
+          + "placed fresh from the sidebar actor carries no copies, but it is the sidebar actor's current version with "
+          + "HP, name and conditions reset, so only replace tokens the party hasn't met.";
       add("high", "World", `Unlinked tokens store ${mb(itemBytes)} of their own item copies`,
         `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${split}${doubled} `
         + "An unlinked token normally stores only what differs from its sidebar actor, so a full set of copies means "
         + `each token carries its own version of every item. Most of it belongs to: ${byActor}.`,
-        "Archiving scenes you aren't using removes their tokens' data from the load. On scenes you keep, a token "
-        + "placed fresh from the sidebar actor carries no copies, but it is the sidebar actor's current version with "
-        + "HP, name and conditions reset, so only replace tokens the party hasn't met.",
-        [can.scenePlan]);
+        fix, [can.scenePlan]);
     }
     if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {
       add("low", "World", `${plural(tk.linkedDelta.tokens, "linked token")} still store ${mb(tk.linkedDelta.bytes)} of actor data`,
@@ -357,9 +370,19 @@ export function recommend(report) {
   const cv = report.canvas;
   if ( cv?.ready ) {
     if ( cv.textureMemory > 1.5 * 1024 * MB ) {
+      // Most of it can be leftovers: Foundry keeps a texture for TextureLoader.CACHE_TTL (15 minutes) after its last
+      // use and only drops expired ones when the next scene loads
+      // Older reports only list this scene's 15 largest textures; their sum is close enough
+      const own = cv.sceneTextureMemory ?? ((cv.textures ?? []).reduce((a, t) => a + (t.bytes ?? 0), 0) || null);
+      const leftovers = Number.isFinite(own) && (own < cv.textureMemory / 2);
       add("high", "Scene", `Textures use about ${mb(cv.textureMemory)} of GPU memory`,
-        "Integrated GPUs share system RAM; once textures exceed what fits, the browser starts evicting and re-uploading.",
-        "Downscale oversized maps and token art (4096 px on the long side is plenty for most maps) and convert to WebP.");
+        "Integrated GPUs share system RAM; once textures exceed what fits, the browser starts evicting and re-uploading."
+        + (leftovers ? ` This scene's own images are about ${mb(own)}; the rest are textures kept from scenes shown or `
+          + "exported in the last 15 minutes, which Foundry drops when a later scene loads." : ""),
+        leftovers
+          ? "After switching through or exporting many scenes, reload to free it. For the scene itself, maps above "
+            + "4096 px on the long side rarely look better at normal zoom."
+          : "Downscale oversized maps and token art (4096 px on the long side is plenty for most maps) and convert to WebP.");
     }
     const huge = (cv.textures ?? []).filter(t => Math.max(t.width, t.height) > 8192).slice(0, 5);
     if ( huge.length ) {

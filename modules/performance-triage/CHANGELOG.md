@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.5.0
+
+From the first archiving session (39 of 128 scenes archived: world data 141.8 to 98.6 MB, GM load 46 to 36 s):
+
+- **Correction**: unlinked tokens' actors are not all built at load. The world build barely changed (9.9 to 9.2 s)
+  while 35% of the tokens left, so a token's actor is built when something first reads it. The report and planner no
+  longer say every player pays for every token at load.
+- **Sequencer**: when the hook profiler names Sequencer's ready handler in a freeze, the finding explains it: a
+  GM-only migration check that reads every token's actor on every scene, which fell from 16.6 to 10.1 s with the
+  archiving above.
+- **Token copies**: when most item copies are items the sidebar actor doesn't have (16,329 of 16,471 in that world),
+  the finding says not to replace those tokens, since a fresh token would be missing them. Tokens that probably show
+  an item twice are named, with the items.
+- **Planner, archived areas**: a new *In compendiums* section lists the world's Scene compendiums, the scenes in
+  them, the teleport regions and tile triggers in world scenes that lead into them, and the journal entries that
+  link there. Scenes in the world that lead into an archived area say so.
+- **Load history**: the report's timeline shows the last 20 loads on this computer, so before-and-after comparisons
+  don't depend on anyone keeping notes. One local write per load, never sent.
+- **Texture memory**: when most of it is textures kept from earlier scenes rather than the current one, the finding
+  says so and suggests a reload; Foundry keeps a texture for 15 minutes after last use.
+
 ## 0.4.1
 
 Review pass on the scene archive planner before its first real use:
