@@ -115,6 +115,9 @@ export class ReportApp extends ApplicationV2 {
 
   static async #onBenchmarkActors(event, target) {
     target.disabled = true;
+    ui.notifications.info(game.i18n.localize("PTRIAGE.Report.TimingActors"));
+    // Let the notification show before the first batch of work
+    await new Promise(resolve => setTimeout(() => resolve(), 50));
     await benchmarkActors();
     this.#open.add("world");
     return this.#refresh();

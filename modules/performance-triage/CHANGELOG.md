@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.1
+
+Review pass on the scene archive planner before its first real use:
+
+- Scenes are grouped into areas (their folder, shown with its parent folders), ranked by how much archiving the area
+  saves; scenes in use are left out of that total and out of the area's prep.
+- "After prep" now means journal entries on the map, or a way in from another area (a teleport region or tile
+  trigger in a scene outside the folder). Links from journal entries and macros are still listed, but no longer mark
+  a scene as needing prep: with IDs kept they work again when it comes back. In an adventure world almost every scene
+  is linked from a journal entry, so the old rule marked nearly everything.
+- The archive and restore steps are spelled out, including creating a Scene compendium first and leaving scenes in
+  use in the world.
+- **Time token actors** in the planner, and the report's actor timing, now record time per scene; the planner shows
+  it as a column, and the report lists the slowest scenes.
+- The checklist is per area, with a checkbox for each area.
+- Actor timing shows a notice while it runs; the planner shows one while it measures, remembers which sections are
+  open, and says how long measuring took.
+- The report's token tables drop the "matching" column (zero for every token in the world measured) and the caption
+  splits item copies into differing, added and identical.
+- The startup frame rate sample also drops intervals in which the tab was hidden and shown again.
+
 ## 0.4.0
 
 - **Scene archive planner** (GM only): ranks every scene by the world data it costs each player at load, totals it

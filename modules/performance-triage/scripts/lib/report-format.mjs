@@ -278,6 +278,10 @@ function sections(report, opts = {}) {
           head: ["Token", "Scene", "Time", "Items", "Effects"],
           rows: tok.rows.slice(0, 15).map(a => [a.name, a.scene, fmtMs(a.ms), a.items, a.effects]) });
       }
+      if ( tok?.byScene?.length ) {
+        t.push({ caption: "Unlinked token actors by scene", head: ["Scene", "Tokens", "Time"],
+          rows: tok.byScene.slice(0, 10).map(s => [s.name, s.tokens, fmtMs(s.ms)]) });
+      }
     }
     out.push({
       id: "world", title: "World contents", tables: t,
@@ -332,10 +336,15 @@ function payloadDetailTables(detail) {
     });
     const tk = sc.tokens;
     if ( tk?.count ) {
+      const split = tk.added
+        ? ` ${tk.items - tk.same.items - tk.added.items} differ from the sidebar actor's item, ${tk.added.items} are `
+          + `items the sidebar actor doesn't have (${tk.added.duplicates} with the same name and type as one it does), `
+          + `${tk.same.items} (${fmtBytes(tk.same.bytes)}) are identical apart from timestamps.`
+        : ` ${tk.same.items} of those copies (${fmtBytes(tk.same.bytes)}) match the sidebar actor's item exactly apart `
+          + "from timestamps.";
       tables.push({
         caption: `Tokens: ${tk.count} on all scenes, ${tk.unlinked} unlinked. ${tk.withItems} store their own copies of `
-          + `${tk.items} items; ${tk.same.items} of those copies (${fmtBytes(tk.same.bytes)}) match the sidebar `
-          + "actor's item exactly apart from timestamps.",
+          + `${tk.items} items.${split}`,
         head: ["Token data", "Size"],
         rows: [
           ...tk.parts.map(x => [`delta: ${x.key}`, fmtBytes(x.bytes)]),
@@ -344,12 +353,12 @@ function payloadDetailTables(detail) {
         ]
       });
       tables.push({
-        caption: "Token data by sidebar actor", head: ["Actor", "Tokens", "Size", "Item copies", "Matching the actor"],
-        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items, g.same])
+        caption: "Token data by sidebar actor", head: ["Actor", "Tokens", "Size", "Item copies"],
+        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items])
       });
       tables.push({
-        caption: "Largest tokens", head: ["Token", "Scene", "Linked", "Size", "Item copies", "Matching", "Effects"],
-        rows: tk.largest.map(t => [t.name, t.scene, t.linked ? "yes" : "no", fmtBytes(t.bytes), t.items, t.same, t.effects])
+        caption: "Largest tokens", head: ["Token", "Scene", "Linked", "Size", "Item copies", "Effects"],
+        rows: tk.largest.map(t => [t.name, t.scene, t.linked ? "yes" : "no", fmtBytes(t.bytes), t.items, t.effects])
       });
     }
   }

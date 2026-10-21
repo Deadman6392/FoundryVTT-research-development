@@ -23,10 +23,15 @@ Object.assign(game, {
   macros: collection([]),
   users: collection([{ id: "p1", active: true, viewedScene: "scene00000000003" }, { id: "p2", active: false, viewedScene: "scene00000000002" }]),
   actors: collection([{ id: "a1", hasPlayerOwner: false }, { id: "a2", hasPlayerOwner: true }]),
-  folders: collection([{ id: "f1", name: "Barovia", type: "Scene" }, { id: "f9", name: "Monsters", type: "Actor" }])
+  folders: collection([
+    { id: "f0", name: "Barovia", type: "Scene", _source: { folder: null } },
+    { id: "f1", name: "Village", type: "Scene", _source: { folder: "f0" } },
+    { id: "f9", name: "Monsters", type: "Actor", _source: { folder: null } }
+  ])
 });
 
 const { collectScenePlan } = await import("../modules/performance-triage/scripts/scene-plan.mjs");
+const { telemetry } = await import("../modules/performance-triage/scripts/telemetry.mjs");
 
 test("collects the plan from world collections", () => {
   const plan = collectScenePlan();
@@ -34,9 +39,21 @@ test("collects the plan from world collections", () => {
   assert.equal(by.Village.status, "inUse", "the active scene");
   assert.equal(by.Crypt.status, "inUse", "a scene an online player is viewing");
   assert.equal(by.Crypt.playerTokens, 1);
-  assert.equal(by.Castle.status, "prep", "an offline player's view doesn't count; the journal link does");
-  assert.equal(by.Castle.folder, "Barovia");
-  assert.deepEqual(by.Castle.linkedFrom, [{ type: "journal", name: "Lore" }]);
+  assert.equal(by.Castle.status, "ready", "an offline player's view doesn't count, and a journal link needs no prep");
+  assert.equal(by.Castle.folder, "Barovia / Village", "nested folders show their path");
+  assert.deepEqual(by.Castle.docLinks, [{ type: "journal", name: "Lore" }]);
+  assert.equal(plan.hasPrepTimes, false);
+});
+
+test("uses token actor timings from this session when there are some", () => {
+  telemetry.prep = { count: 0, totalMs: 0, actors: [], tokens: { count: 1, totalMs: 40, rows: [], byScene: [{ id: "scene00000000002", name: "Castle", tokens: 1, ms: 40 }] } };
+  try {
+    const by = Object.fromEntries(collectScenePlan().rows.map(r => [r.name, r]));
+    assert.equal(by.Castle.prepMs, 40);
+    assert.equal(by.Village.prepMs, null);
+  } finally {
+    telemetry.prep = null;
+  }
 });
 
 test("the planner window is GM only", async () => {

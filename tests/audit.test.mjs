@@ -104,6 +104,7 @@ test("benchmarkActors also times unlinked tokens' actors, skipping linked tokens
     const prep = await benchmarkActors();
     assert.equal(prep.count, 2, "world actors are still timed");
     assert.equal(prep.tokens.count, 1);
+    assert.deepEqual(prep.tokens.byScene.map(s => [s.name, s.tokens]), [["Crypt", 1]], "per-scene totals for the planner");
     assert.deepEqual([prep.tokens.rows[0].name, prep.tokens.rows[0].scene, prep.tokens.rows[0].items], ["Zombie", "Crypt", 12]);
   } finally {
     game.scenes = previous;

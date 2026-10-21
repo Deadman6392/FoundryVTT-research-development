@@ -70,7 +70,8 @@
       "RecordFailed": "The CPU profile could not be recorded. See the browser console for details.",
       "MeasuringLayers": "Measuring layer costs for about 30 seconds. The map will flicker; please don't move anything until it finishes.",
       "MeasureFailed": "The layer cost measurement failed. See the browser console for details.",
-      "LowProfileSet": "This computer will use the Low profile after a reload. You can change it back under My performance profile in this module's settings."
+      "LowProfileSet": "This computer will use the Low profile after a reload. You can change it back under My performance profile in this module's settings.",
+      "TimingActors": "Timing actor preparation for every world actor and every unlinked token. On a large world this takes 10 seconds or more; the game may stutter until it finishes."
     },
     "Profiles": {
       "Title": "Client Performance Profiles",
@@ -87,7 +88,8 @@
     },
     "ScenePlan": {
       "Title": "Scene archive planner",
-      "Copied": "Prep checklist copied to the clipboard."
+      "Copied": "Prep checklist copied to the clipboard.",
+      "Measuring": "Measuring every scene. On a large world this takes a second or two."
     }
   }
 }
