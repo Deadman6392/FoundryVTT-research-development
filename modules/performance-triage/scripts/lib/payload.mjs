@@ -25,8 +25,8 @@ function itemJson(item) {
 
 /**
  * Sizes every token's actor delta. An unlinked token stores its own copy of each item that differs from the
- * sidebar actor's, and anything that rewrites every item (a system migration, a bulk automation update) leaves a
- * full copy of the actor in every token. Items that still match the base actor exactly are counted separately:
+ * sidebar actor's, so a token carrying a copy of every item weighs as much as a whole actor. Items that still match
+ * the base actor exactly are counted separately:
  * they make the world bigger without making the token any different. Items whose id the base actor doesn't have
  * are additions, which the token shows on top of the base actor's items; an addition with the same name and type as
  * a base item usually means the token shows that item twice.

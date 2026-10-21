@@ -74,14 +74,16 @@ how many are identical apart from timestamps (in that world, only 2 were).
 
 What helps, roughly in order of effort:
 
-- **Archive scenes nobody is near.** *Plan scene archiving* (GM only) ranks every scene, totals them by folder, and
-  lists what to prepare first: map notes that open journal entries, and journal entries, macros or other scenes that
-  link to the scene. Then right-click a scene folder, *Export to Compendium*, tick the option to keep IDs, and delete
-  those scenes from the Scenes tab. A compendium is not sent at startup beyond its index. To bring an area back, use
-  that compendium's *Import All* with its keep-ID option ticked; with the same IDs, journal links, teleport regions,
-  tile triggers and map notes work again. Dragging a single scene out of a compendium can give it a new ID, so one
-  compendium per area is easier than one big archive. Try the round trip on one scene first, and check that explored
-  fog survives it.
+- **Archive areas nobody is near.** *Plan scene archiving* (GM only) groups scenes by folder and ranks the folders
+  by how much archiving them saves. It marks scenes that need prep first: journal entries on the map (keep them
+  reachable from the Journal tab), and ways in from other areas, such as a teleport region in a scene that stays (if
+  players head through one, bring the area back first). Then create a Scene compendium for the area, right-click the
+  folder, *Export to Compendium* with the option to keep IDs ticked, and delete those scenes from the world, except
+  any in use. A compendium is not sent at startup beyond its index. To bring the area back, use that compendium's
+  *Import All* with its keep-ID option ticked; with the same IDs, journal links, teleport regions, tile triggers and
+  map notes work again. Dragging a single scene out of a compendium can give it a new ID, so one compendium per area
+  is easier than one big archive. Try the round trip on one small area first, and check that explored fog survives
+  it.
 - **Replace unused tokens that carry copies.** Deleting a token and placing a fresh one from the sidebar actor drops
   its copies. It also resets that token's HP, name and conditions, so do it for tokens the party hasn't met yet.
 - **Move NPCs you aren't using into a compendium.** Every world actor is sent to and prepared by every client.

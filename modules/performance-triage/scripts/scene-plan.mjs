@@ -1,8 +1,27 @@
 /**
  * Gathers what the scene archive planner needs from the world. GM-only and on demand: it reads every scene's source
- * data (a second or two on a 100 MB world) and changes nothing.
+ * data (about a second on a 100 MB world) and changes nothing.
  */
+import { telemetry } from "./telemetry.mjs";
 import { planScenes } from "./lib/scene-plan.mjs";
+
+/** Scene folder id -> "Parent / Child" path, so nested folders with the same name can be told apart. */
+function folderPaths() {
+  const all = new Map();
+  for ( const f of game.folders ) all.set(f.id, f);
+  const paths = new Map();
+  for ( const f of all.values() ) {
+    if ( f.type !== "Scene" ) continue;
+    const names = [];
+    const seen = new Set();
+    for ( let cur = f; cur && !seen.has(cur.id); cur = all.get(cur._source?.folder) ) {
+      seen.add(cur.id);
+      names.unshift(cur.name);
+    }
+    paths.set(f.id, names.join(" / "));
+  }
+  return paths;
+}
 
 export function collectScenePlan() {
   // Never suggest archiving a scene someone is on
@@ -11,8 +30,7 @@ export function collectScenePlan() {
   for ( const user of game.users ) if ( user.active && user.viewedScene ) inUse.add(user.viewedScene);
   const playerActors = new Set();
   for ( const actor of game.actors ) if ( actor.hasPlayerOwner ) playerActors.add(actor.id);
-  const folders = new Map();
-  for ( const folder of game.folders ) if ( folder.type === "Scene" ) folders.set(folder.id, folder.name);
+  const byScene = telemetry.prep?.tokens?.byScene;
   // _source is read as is, not cloned: toObject() would copy every scene first
   return planScenes({
     scenes: game.scenes.map(s => s._source),
@@ -20,6 +38,7 @@ export function collectScenePlan() {
     macros: game.macros.map(m => m._source),
     inUse,
     playerActors,
-    folders
+    folders: folderPaths(),
+    prepMs: byScene ? new Map(byScene.map(s => [s.id, s.ms])) : null
   });
 }

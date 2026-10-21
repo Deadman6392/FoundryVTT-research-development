@@ -25,11 +25,14 @@ token on every scene, and lists the slowest. dnd5e preparation runs on every cli
 that actor.
 
 **Scene archive planner** (GM only, *Configure Settings > Performance Triage > Plan scene archiving*, or the button on
-the report's scene findings): ranks every scene by how much world data it costs each player at load, groups them by
-folder, and sorts them into "archive with no prep", "archive after prep" (the scene has map notes that open journal
-entries, or other journals, macros or scenes link to it), "small, leave it" and "in use now". **Copy prep checklist**
-puts the plan in your clipboard as a Markdown checklist. It reads the world and changes nothing; the archiving itself
-is done with Foundry's own Export to Compendium, keeping IDs so links still work when a scene comes back.
+the report's scene findings): groups scenes by folder, since Foundry exports a whole folder to a compendium in one
+step, and ranks the folders by how much world data archiving them would take off every player's load. Each scene is
+marked "archive, no prep", "archive after prep" (it has journal entries on its map, or a teleport region or tile
+trigger in another area leads to it), "small" or "in use now" (the active scene, or one an online player is viewing).
+Links from journal entries and macros are listed but need no prep: with IDs kept they work again when the scene comes
+back. **Time token actors** adds how long each scene's unlinked tokens take to prepare, and **Copy prep checklist**
+copies a per-area Markdown checklist with the archive and restore steps. It reads the world and changes nothing; the
+archiving itself is done with Foundry's own Export to Compendium and Import All, keeping IDs.
 
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each

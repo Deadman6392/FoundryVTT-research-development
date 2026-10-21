@@ -341,24 +341,31 @@ export async function benchmarkActors() {
   rows.sort((a, b) => b.ms - a.ms);
 
   const tokenRows = [];
+  const byScene = [];
   let tokenTotal = 0;
   for ( const scene of game.scenes ?? [] ) {
+    const sceneRow = { id: scene.id, name: scene.name, tokens: 0, ms: 0 };
     for ( const token of scene.tokens ?? [] ) {
       if ( token.actorLink || token.isLazyDelta ) continue;
       const actor = token.actor;
       if ( !actor ) continue;
       const r = timeReset(actor);
       tokenTotal += r.ms;
+      sceneRow.tokens++;
+      sceneRow.ms += r.ms;
       tokenRows.push({ name: token.name, scene: scene.name, ms: Math.round(r.ms * 10) / 10, items: r.items, effects: r.effects });
       await maybeYield();
     }
+    if ( sceneRow.tokens ) byScene.push({ ...sceneRow, ms: Math.round(sceneRow.ms) });
   }
   tokenRows.sort((a, b) => b.ms - a.ms);
+  byScene.sort((a, b) => b.ms - a.ms);
 
   return telemetry.prep = {
     count: rows.length,
     totalMs: Math.round(total),
     actors: rows.slice(0, 25),
-    tokens: { count: tokenRows.length, totalMs: Math.round(tokenTotal), rows: tokenRows.slice(0, 25) }
+    // Every scene is kept (a few dozen bytes each) so the scene archive planner can show each one's cost
+    tokens: { count: tokenRows.length, totalMs: Math.round(tokenTotal), rows: tokenRows.slice(0, 25), byScene }
   };
 }

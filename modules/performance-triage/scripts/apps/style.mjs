@@ -34,6 +34,12 @@ const CSS = `
 .ptriage-plan .ptriage-summary { font-size: 0.85em; opacity: 0.8; }
 .ptriage-table td.ptriage-wrap { white-space: normal; min-width: 14em; }
 .ptriage-plan-small, .ptriage-plan-inUse { opacity: 0.65; }
+.ptriage-area { margin: 0.2rem 0 0.2rem 0.4rem; border-left: 3px solid rgba(127,127,127,0.35); padding-left: 0.5rem; }
+.ptriage-area > summary { cursor: pointer; padding: 0.2rem 0; font-size: 1.02em; }
+.ptriage-area > summary .ptriage-summary { margin-left: 0.4rem; }
+.ptriage-area > p { margin: 0.25rem 0; }
+.ptriage-plan ol { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
+.ptriage-plan ol li { margin-bottom: 0.25rem; }
 `;
 
 export function injectStyle() {
