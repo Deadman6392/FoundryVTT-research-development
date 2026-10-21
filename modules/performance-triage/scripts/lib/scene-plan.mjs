@@ -81,10 +81,20 @@ const sameArea = (a, b) => !!a && (a === b);
  * @param {Set<string>} [input.playerActors]      Actor ids that a player owns
  * @param {Map<string, string>} [input.folders]   Scene folder id -> display path ("Vallaki / Interiors")
  * @param {Map<string, number>} [input.prepMs]    Scene id -> time to prepare its unlinked tokens' actors, if measured
+ * @param {{id: string, title: string, scenes: {id: string, name: string}[]}[]} [input.archived]
+ *   Scene compendiums in this world and the scenes in them, from their indexes
  */
 export function planScenes({ scenes, journals = [], macros = [], inUse = new Set(), playerActors = new Set(),
-  folders = new Map(), prepMs = null }) {
+  folders = new Map(), prepMs = null, archived = [] }) {
   const ids = new Set(scenes.map(s => s?._id).filter(Boolean));
+  // A scene that is in the world as well as a compendium (kept after a restore) is not archived
+  const archivedById = new Map();
+  for ( const pack of archived ) {
+    for ( const sc of pack.scenes ?? [] ) {
+      if ( sc?.id && !ids.has(sc.id) ) archivedById.set(sc.id, { name: sc.name || "(unnamed)", pack: pack.title });
+    }
+  }
+  const archivedIds = new Set(archivedById.keys());
   const byId = new Map(scenes.map(s => [s?._id, s]));
   const journalNames = new Map(journals.map(j => [j?._id, j?.name ?? ""]));
   const folderOf = id => byId.get(id)?.folder || "";
@@ -95,12 +105,22 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
     if ( !docLinks.has(target) ) docLinks.set(target, []);
     docLinks.get(target).push({ type, name: name || "(unnamed)" });
   };
-  for ( const j of journals ) for ( const id of sceneRefs(json(j), ids, null) ) addDocLink(id, "journal", j?.name);
+  const archiveJournalLinks = new Map(); // compendium title -> journal entries linking into it
+  for ( const j of journals ) {
+    const text = json(j);
+    for ( const id of sceneRefs(text, ids, null) ) addDocLink(id, "journal", j?.name);
+    for ( const id of sceneRefs(text, archivedIds, null) ) {
+      const pack = archivedById.get(id).pack;
+      if ( !archiveJournalLinks.has(pack) ) archiveJournalLinks.set(pack, new Set());
+      archiveJournalLinks.get(pack).add(j?.name || "(unnamed)");
+    }
+  }
   for ( const m of macros ) for ( const id of sceneRefs(json(m), ids, null) ) addDocLink(id, "macro", m?.name);
 
   // A teleport region or tile trigger in another scene is a way in that players can use during play
   const measured = new Map();
   const sceneLinks = new Map(); // target scene id -> [source scene id]
+  const exits = new Map(); // world scene id -> archived scenes it leads to
   for ( const scene of scenes ) {
     const m = measureScene(scene);
     measured.set(scene?._id, m);
@@ -108,6 +128,8 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
       if ( !sceneLinks.has(target) ) sceneLinks.set(target, []);
       sceneLinks.get(target).push(scene._id);
     }
+    const out = [...sceneRefs(m.linkText, archivedIds, null)].map(id => archivedById.get(id));
+    if ( out.length ) exits.set(scene?._id, out);
   }
 
   const rows = scenes.map(scene => {
@@ -138,6 +160,7 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
       pinned: [...pinned.entries()].map(([id, name]) => ({ id, name: name || "(missing journal entry)" })),
       entrances: links.filter(l => !sameArea(folderOf(l.id), folderId)),
       docLinks: docLinks.get(scene?._id) ?? [],
+      exitsToArchive: exits.get(scene?._id) ?? [],
       navigation: scene?.navigation === true,
       inUse: inUse.has(scene?._id)
     };
@@ -191,9 +214,22 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
     folderAreas.push(merged);
   }
 
+  // What is already in compendiums, and how players could walk into it from the world
+  const archive = archived.map(pack => {
+    const names = (pack.scenes ?? []).filter(sc => archivedById.has(sc.id)).map(sc => sc.name || "(unnamed)");
+    const waysIn = [];
+    for ( const r of rows ) {
+      for ( const e of r.exitsToArchive ) {
+        if ( e.pack === pack.title ) waysIn.push({ from: r.name, fromFolder: r.folder, to: e.name });
+      }
+    }
+    return { id: pack.id, title: pack.title, names, waysIn, journals: [...(archiveJournalLinks.get(pack.title) ?? [])].sort() };
+  }).filter(a => a.names.length).sort((a, b) => (b.waysIn.length - a.waysIn.length) || a.title.localeCompare(b.title));
+
   return {
     totalBytes: rows.reduce((a, r) => a + r.bytes, 0),
     hasPrepTimes: !!prepMs,
+    archive,
     rows,
     areas: folderAreas,
     groups
@@ -232,6 +268,9 @@ export function sceneNote(row) {
     parts.push(`ways in from other areas: ${list(row.entrances.map(e => `${e.name}${e.folder ? ` (${e.folder})` : ""}`))}`);
   }
   if ( row.docLinks.length ) parts.push(`linked from ${list(row.docLinks.map(l => `${l.name} (${l.type})`))}`);
+  if ( row.exitsToArchive?.length ) {
+    parts.push(`leads into archived scenes: ${list(row.exitsToArchive.map(e => `${e.name} (${e.pack})`))}`);
+  }
   if ( row.playerTokens ) parts.push(`${row.playerTokens} player character token${row.playerTokens === 1 ? "" : "s"}`);
   if ( row.navigation ) parts.push("in the navigation bar");
   return parts.join("; ");
@@ -283,6 +322,26 @@ function areaNotes(a) {
   return notes;
 }
 
+/** The archived areas section: what is in compendiums and which exits in the world lead there. */
+function archiveHtml(plan, isOpen) {
+  if ( !plan.archive.length ) return "";
+  const blocks = plan.archive.map(a => {
+    const notes = [
+      `${a.names.length} scene${a.names.length === 1 ? "" : "s"}: ${list(a.names)}.`,
+      a.waysIn.length
+        ? `Ways in from scenes in the world (bring the area back before players use them): ${list(a.waysIn.map(entranceText))}.`
+        : "No teleport regions or tile triggers in the world lead here.",
+      ...(a.journals.length ? [`Journal entries linking here (they work again once it is back): ${list(a.journals)}.`] : [])
+    ];
+    return `<div class="ptriage-area"><p><strong>${esc(a.title)}</strong></p>${notes.map(n => `<p>${esc(n)}</p>`).join("")}</div>`;
+  }).join("");
+  const ways = plan.archive.reduce((n, a) => n + a.waysIn.length, 0);
+  return `<details class="ptriage-section" data-section="archive"${isOpen("archive")}>
+    <summary>In compendiums: ${plan.archive.length} pack${plan.archive.length === 1 ? "" : "s"}, ${ways} way${ways === 1 ? "" : "s"} in from the world</summary>
+    <p>${esc("Scene compendiums in this world, and the teleport regions or tile triggers in world scenes that lead into them. If players head through one, import that area first, keeping IDs.")}</p>
+    ${blocks}</details>`;
+}
+
 function sceneTable(rows, hasPrepTimes) {
   const head = ["Scene", "Suggestion", "Size", "Token item copies", ...(hasPrepTimes ? ["Token actor prep"] : []),
     "Tokens", "Walls", "Lights", "Notes"];
@@ -325,7 +384,8 @@ export function scenePlanToHtml(plan, { open = new Set(["areas"]), measuredMs = 
 
   const unlinked = plan.rows.reduce((a, r) => a + r.unlinked, 0);
   const timing = plan.hasPrepTimes ? "" : `<p>${esc("\"Time token actors\" adds a column with how long each "
-    + `scene's unlinked tokens take to prepare, which every player's computer also pays at load. It re-prepares all `
+    + "scene's unlinked tokens take to prepare. Each player pays that when the scene is first drawn, and the GM pays "
+    + "it for every scene at every load while a module such as Sequencer checks every token. It re-prepares all "
     + `${unlinked} of them; about 1,000 took 10 seconds on a fast desktop.`)}</p>`;
 
   return `<div class="ptriage-header">
@@ -342,6 +402,7 @@ export function scenePlanToHtml(plan, { open = new Set(["areas"]), measuredMs = 
       <ol>${PLAN_STEPS.map(s => `<li>${esc(s)}</li>`).join("")}</ol><p>${esc(PREP_NOTE)}</p></details>
     <details class="ptriage-section" data-section="areas"${isOpen("areas")}><summary>Areas (scene folders), most to gain first</summary>
       ${timing}${areas}</details>
+    ${archiveHtml(plan, isOpen)}
     <details class="ptriage-section" data-section="all"${isOpen("all")}><summary>All scenes, best candidates first</summary>
       ${sceneTable(plan.rows, plan.hasPrepTimes)}</details>`;
 }
@@ -354,6 +415,12 @@ export function scenePlanToMarkdown(plan) {
   const lines = ["# Scene archive plan", "", PLAN_SUMMARY, "", "## How to archive an area and bring it back", ""];
   PLAN_STEPS.forEach((s, i) => lines.push(`${i + 1}. ${s}`));
   lines.push("", PREP_NOTE, "");
+  const ways = plan.archive.filter(a => a.waysIn.length);
+  if ( ways.length ) {
+    lines.push("## Ways into archived areas", "", "Bring the area back before players use one of these.", "");
+    for ( const a of ways ) for ( const w of a.waysIn ) lines.push(`- ${entranceText(w)} (${a.title})`);
+    lines.push("");
+  }
   for ( const a of plan.areas ) {
     if ( a.saves < SMALL_SCENE_BYTES ) continue;
     lines.push(`## ${areaTitle(a)}`, "", areaSummary(a), "");

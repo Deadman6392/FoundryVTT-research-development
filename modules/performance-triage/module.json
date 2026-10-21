@@ -2,7 +2,7 @@
   "id": "performance-triage",
   "title": "Performance Triage",
   "description": "Find out what is slowing your game down and give struggling players a lighter client. Measures load time, files per module, stutters and hook costs per module, GPU memory and world bloat, and lets the GM assign low-spec display profiles to individual players.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "library": true,
   "authors": [
     {
@@ -25,7 +25,7 @@
   ],
   "url": "https://github.com/Deadman6392/FoundryVTT-research-development",
   "manifest": "https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/performance-triage/module.json",
-  "download": "https://github.com/Deadman6392/FoundryVTT-research-development/releases/download/performance-triage-v0.4.1/performance-triage.zip",
+  "download": "https://github.com/Deadman6392/FoundryVTT-research-development/releases/download/performance-triage-v0.5.0/performance-triage.zip",
   "bugs": "https://github.com/Deadman6392/FoundryVTT-research-development/issues",
   "changelog": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/performance-triage/CHANGELOG.md",
   "readme": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/performance-triage/README.md"

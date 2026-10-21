@@ -15,7 +15,8 @@ const doc = (source, extra = {}) => ({ id: source._id, _source: source, ...sourc
 const huge = { items: [{ name: "Claw", system: { description: { value: "x".repeat(300_000) } } }] };
 Object.assign(game, {
   scenes: collection([
-    doc({ _id: "scene00000000001", name: "Village", folder: "f1", active: true, tokens: [] }),
+    doc({ _id: "scene00000000001", name: "Village", folder: "f1", active: true, tokens: [],
+      regions: [{ behaviors: [{ system: { destination: "Scene.archived00000001.Region.r000000000000001" } }] }] }),
     doc({ _id: "scene00000000002", name: "Castle", folder: "f1", tokens: [{ _id: "t1", actorId: "a1", actorLink: false, delta: huge }] }),
     doc({ _id: "scene00000000003", name: "Crypt", folder: null, tokens: [{ _id: "t2", actorId: "a2", actorLink: true, delta: huge }] })
   ]),
@@ -23,6 +24,13 @@ Object.assign(game, {
   macros: collection([]),
   users: collection([{ id: "p1", active: true, viewedScene: "scene00000000003" }, { id: "p2", active: false, viewedScene: "scene00000000002" }]),
   actors: collection([{ id: "a1", hasPlayerOwner: false }, { id: "a2", hasPlayerOwner: true }]),
+  packs: collection([
+    // The GM's archive: one scene still in the world (kept after a restore), one only in the compendium
+    { documentName: "Scene", metadata: { packageType: "world" }, collection: "world.archive-vallaki", title: "Archive: Vallaki",
+      index: collection([{ _id: "archived00000001", name: "Wachterhaus" }, { _id: "scene00000000002", name: "Castle" }]) },
+    { documentName: "Actor", metadata: { packageType: "world" }, collection: "world.npcs", title: "NPCs", index: collection([{ _id: "x", name: "Bandit" }]) },
+    { documentName: "Scene", metadata: { packageType: "module" }, collection: "maps.pack", title: "Map pack", index: collection([{ _id: "m", name: "Cave" }]) }
+  ]),
   folders: collection([
     { id: "f0", name: "Barovia", type: "Scene", _source: { folder: null } },
     { id: "f1", name: "Village", type: "Scene", _source: { folder: "f0" } },
@@ -42,6 +50,9 @@ test("collects the plan from world collections", () => {
   assert.equal(by.Castle.status, "ready", "an offline player's view doesn't count, and a journal link needs no prep");
   assert.equal(by.Castle.folder, "Barovia / Village", "nested folders show their path");
   assert.deepEqual(by.Castle.docLinks, [{ type: "journal", name: "Lore" }]);
+  assert.deepEqual(plan.archive.map(a => [a.title, a.names]), [["Archive: Vallaki", ["Wachterhaus"]]],
+    "only world scene compendiums, and only scenes that aren't also in the world");
+  assert.deepEqual(plan.archive[0].waysIn, [{ from: "Village", fromFolder: "Barovia / Village", to: "Wachterhaus" }]);
   assert.equal(plan.hasPrepTimes, false);
 });
 

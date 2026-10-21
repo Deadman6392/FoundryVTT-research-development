@@ -134,9 +134,15 @@ export function installFoundry({ userId = "player1", role = 1, activeModules = [
     : Object.assign(new EventTarget(), { hidden: false, hasFocus: () => true, head: { append() {} }, getElementById: () => null });
 
   if ( !browser ) {
-    // Module code uses long-lived intervals (idle checks); unref them so a test process can exit when its tests end
+    // Module code uses long-lived intervals (idle checks) and a one-minute timer (load history); unref them so a
+    // test process can exit when its tests end. A browser page doesn't wait for timers either.
     const setIntervalReal = globalThis.setInterval;
     globalThis.setInterval = (fn, ms, ...args) => setIntervalReal(fn, ms, ...args).unref();
+    const setTimeoutReal = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms, ...args) => {
+      const t = setTimeoutReal(fn, ms, ...args);
+      return (ms >= 10_000) ? t.unref() : t;
+    };
     Object.assign(globalThis, {
       localStorage,
       window: win,

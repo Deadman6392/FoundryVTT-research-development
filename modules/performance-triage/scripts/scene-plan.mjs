@@ -23,6 +23,18 @@ function folderPaths() {
   return paths;
 }
 
+/** Scene compendiums in this world and the scenes their indexes list; the GM's archives live here. */
+function archivedScenes() {
+  const out = [];
+  for ( const pack of game.packs ) {
+    if ( (pack.documentName !== "Scene") || (pack.metadata?.packageType !== "world") ) continue;
+    const scenes = [];
+    for ( const entry of pack.index ) scenes.push({ id: entry._id, name: entry.name ?? "" });
+    out.push({ id: pack.collection, title: pack.title, scenes });
+  }
+  return out;
+}
+
 export function collectScenePlan() {
   // Never suggest archiving a scene someone is on
   const inUse = new Set();
@@ -39,6 +51,7 @@ export function collectScenePlan() {
     inUse,
     playerActors,
     folders: folderPaths(),
-    prepMs: byScene ? new Map(byScene.map(s => [s.id, s.ms])) : null
+    prepMs: byScene ? new Map(byScene.map(s => [s.id, s.ms])) : null,
+    archived: archivedScenes()
   });
 }

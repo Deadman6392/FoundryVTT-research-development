@@ -21,8 +21,9 @@ data at startup. Turn it on for a session, read the tables, turn it off.
 responsible, including inside libWrapper wrappers.
 
 **Actor preparation timing** (button in the report): re-prepares every world actor, and the actor of every unlinked
-token on every scene, and lists the slowest. dnd5e preparation runs on every client at load and after every change to
-that actor.
+token on every scene, and lists the slowest actors and scenes. World actors are prepared on every client at load and
+after every change to them. A token's actor is built when something first reads it: drawing its scene, or a module
+that walks every token (Sequencer's GM-only startup check does).
 
 **Scene archive planner** (GM only, *Configure Settings > Performance Triage > Plan scene archiving*, or the button on
 the report's scene findings): groups scenes by folder, since Foundry exports a whole folder to a compendium in one
@@ -31,8 +32,13 @@ marked "archive, no prep", "archive after prep" (it has journal entries on its m
 trigger in another area leads to it), "small" or "in use now" (the active scene, or one an online player is viewing).
 Links from journal entries and macros are listed but need no prep: with IDs kept they work again when the scene comes
 back. **Time token actors** adds how long each scene's unlinked tokens take to prepare, and **Copy prep checklist**
-copies a per-area Markdown checklist with the archive and restore steps. It reads the world and changes nothing; the
+copies a per-area Markdown checklist with the archive and restore steps. Once areas are archived, *In compendiums*
+lists the world's Scene compendiums and the teleport regions or tile triggers in world scenes that lead into them. It reads the world and changes nothing; the
 archiving itself is done with Foundry's own Export to Compendium and Import All, keeping IDs.
+
+**Load history** (in the report's timeline): the last 20 loads on this computer, with time until usable, the wait for
+the server, the world build, ready handlers, scene and token counts and the frame rate, so the effect of a change
+(archiving an area, disabling a module) shows up as numbers.
 
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
@@ -91,6 +97,8 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   the profiler is on. That takes a fraction of a second for a 140 MB world on a desktop (about 0.55 s in Node for a
   synthetic 124 MB world) and the report shows how long it took on your computer.
 - Summary sharing: one update to your own User document per session, about a minute after loading.
+- Load history: one timer a minute after loading, which writes one small entry to this browser's localStorage. It is
+  never sent anywhere.
 
 ## Why it is marked as a library
 

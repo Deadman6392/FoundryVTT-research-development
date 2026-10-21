@@ -69,8 +69,9 @@ Turn on the hook profiler for one load to get the *World data sent to every clie
 were three quarters of it, and most of that was unlinked tokens' own copies of their items: 946 of 964 unlinked
 tokens carried 16,471 item copies, 89 MB. An unlinked token normally stores only what differs from its sidebar actor,
 so a full set of copies means each token carries its own version of every item. The report counts those copies,
-groups them by sidebar actor, and says how many differ from the sidebar actor's items, how many are extra items, and
-how many are identical apart from timestamps (in that world, only 2 were).
+groups them by sidebar actor, and splits them into items that differ from the sidebar actor's version, items the
+sidebar actor doesn't have, and identical copies. In that world 16,329 of the 16,471 were items the sidebar actors
+don't have: those tokens are the only place the items exist.
 
 What helps, roughly in order of effort:
 
@@ -83,12 +84,37 @@ What helps, roughly in order of effort:
   *Import All* with its keep-ID option ticked; with the same IDs, journal links, teleport regions, tile triggers and
   map notes work again. Dragging a single scene out of a compendium can give it a new ID, so one compendium per area
   is easier than one big archive. Try the round trip on one small area first, and check that explored fog survives
-  it.
-- **Replace unused tokens that carry copies.** Deleting a token and placing a fresh one from the sidebar actor drops
-  its copies. It also resets that token's HP, name and conditions, so do it for tokens the party hasn't met yet.
-- **Move NPCs you aren't using into a compendium.** Every world actor is sent to and prepared by every client.
+  it. Once areas are archived, the planner's *In compendiums* section lists them and the teleport regions or tile
+  triggers in the world that lead into them, so you know which exits need the area brought back first.
 - **Check large world settings.** The report lists the largest ones. A module storing a big menu or cache in a world
   setting costs every client on every load; its own options or its author can tell you whether it can be trimmed.
+- **Don't replace tokens to save space unless you've checked.** A token placed fresh from the sidebar actor carries
+  no copies, but when the report says most copies are items the sidebar actor doesn't have, a fresh token would be
+  missing them. Archiving the scene is the safe way to take those tokens out of the load.
+- **Be careful moving NPCs out of the sidebar.** Every world actor is sent to and prepared by every client, but an
+  unlinked token needs its sidebar actor to exist, including tokens on archived scenes that you may bring back. Only
+  move actors no scene uses, and keep IDs if you do.
+
+### What archiving one area did
+
+Archiving 39 of 128 scenes in that world, measured on the GM's desktop before and after:
+
+| | Before | After |
+| --- | --- | --- |
+| World data | 141.8 MB | 98.6 MB |
+| Scenes / unlinked tokens | 128 / 964 | 89 / 649 |
+| Waiting for the server | 10 to 15 s | 7.8 s |
+| Building the world (init to setup) | 9.9 to 11.0 s | 9.2 s |
+| Sequencer's GM-only ready handler | 16.0 to 16.6 s | 10.1 s |
+| Time until usable (GM) | 46 to 48 s | 36 s |
+
+Two things it showed. The server wait and Sequencer's check shrink with the world; the world build barely does,
+because a token's actor is only built when something first reads it (drawing its scene, or Sequencer's check), so
+most of the build is world actors and the other documents. And Sequencer's freeze is the GM's alone: its migration
+check reads every token's actor on every scene, on the GM only.
+
+The report's *Load history on this computer* table keeps the last 20 loads, so each player can see the same
+before-and-after for their own machine without anyone writing it down.
 
 ## The client profiles
 

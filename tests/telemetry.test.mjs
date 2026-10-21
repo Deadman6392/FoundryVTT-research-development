@@ -22,9 +22,9 @@ Object.assign(env.ticker, {
   setTimeout(tick, 1000 / 30).unref();
 })();
 
-/** The mock unrefs intervals; hold the process open while a sample runs. */
+/** The mock unrefs intervals and long timeouts; hold the process open while a sample (a few seconds) runs. */
 async function held(promise) {
-  const keep = setTimeout(() => {}, 60_000);
+  const keep = setTimeout(() => {}, 9_000);
   try {
     return await promise;
   } finally {

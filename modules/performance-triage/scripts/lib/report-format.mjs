@@ -6,6 +6,7 @@ import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { describeSummary } from "./recommend.mjs";
 import { settledAt, worldDataWait } from "./frames.mjs";
+import { median } from "./history.mjs";
 
 /* -------------------------------------------- */
 /*  Formatting helpers                          */
@@ -85,7 +86,8 @@ function sections(report, opts = {}) {
       + "Before \"World data arrived\" the page is idle, waiting on the server and the network; after it, this "
       + "computer is building the world. \"ready hook fired\" is when Foundry starts calling ready handlers; the "
       + "game is usable once they finish.",
-    tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) }]
+    tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) },
+      ...historyTables(report.history)]
   });
 
   // Network
@@ -319,6 +321,25 @@ function sections(report, opts = {}) {
     });
   }
   return out;
+}
+
+/** Earlier loads on this computer, newest first, recorded a minute after each load. */
+function historyTables(history) {
+  if ( !history?.length ) return [];
+  const when = at => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
+  };
+  const usable = median(history.map(h => h.usable));
+  return [{
+    caption: `Load history on this computer: ${history.length} load${history.length === 1 ? "" : "s"}, median time `
+      + `until usable ${fmtMs(usable)}. Server waits vary between loads, so compare several.`,
+    head: ["When", "Until usable", "Waiting for server", "Building (init to setup)", "Ready handlers", "Scenes",
+      "Tokens", "World data", "Frame rate", "Profile"],
+    rows: history.map(h => [when(h.at), fmtMs(h.usable), fmtMs(h.wait), fmtMs(h.build), fmtMs(h.readyHandlers),
+      h.scenes ?? "–", h.tokens ?? "–", Number.isFinite(h.worldBytes) ? fmtBytes(h.worldBytes) : "–",
+      Number.isFinite(h.fps) ? `${h.fps} fps` : "–", h.profile ?? "–"])
+  }];
 }
 
 /** Breakdown tables for the parts of the world data that are usually largest. */

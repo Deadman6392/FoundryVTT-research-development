@@ -118,6 +118,6 @@ test("token item copies are split into matching, differing and added items, and 
   const t = measurePayload({ actors, scenes: [{ _id: "s1", name: "Crypt", tokens }] }).detail.scenes.tokens;
   assert.equal(t.items, 5);
   assert.equal(t.same.items, 1);
-  assert.deepEqual(t.added, { items: 2, duplicates: 1 });
+  assert.deepEqual(t.added, { items: 2, duplicates: 1, examples: [{ scene: "Crypt", token: "Ghoul", items: ["Claw"] }] });
 });
 

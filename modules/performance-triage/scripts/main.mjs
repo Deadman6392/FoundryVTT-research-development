@@ -18,6 +18,9 @@ import "./lib/hook-profiler.mjs";
 
 bootstrap();
 
+/** Record load history after the one-minute frame rate sample, so its result is included. */
+const HISTORY_DELAY_MS = 65_000;
+
 const state = {
   profileId: "none",
   setup: null,
@@ -259,4 +262,10 @@ Hooks.once("ready", async () => {
   if ( telemetry.hookProfiler?.installed ) ui.notifications.warn(game.i18n.localize("PTRIAGE.Notify.ProfilerActive"));
 
   if ( game.settings.get(MODULE_ID, "shareSummary") ) shareSummary();
+
+  // One local entry per load for the report's load history; a single timer, a minute after ready
+  setTimeout(() => {
+    import("./history.mjs").then(m => m.recordLoad(state.profileId))
+      .catch(err => console.warn(`${MODULE_ID} | Could not record load history`, err));
+  }, HISTORY_DELAY_MS);
 });

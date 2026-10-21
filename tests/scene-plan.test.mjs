@@ -145,3 +145,25 @@ test("a scene in use adds no prep to its area", () => {
   assert.equal(barovia.saves, barovia.bytes - planScenes(input).rows.find(r => r.name === "Village").bytes);
 });
 
+test("archived areas list what is in compendiums and the ways into them from the world", () => {
+  const input = world();
+  const stored = "stored0000000001";
+  input.scenes[0].regions = teleportTo(stored);                 // Castle has a teleport into an archived scene
+  input.journals[1].pages = [{ text: { content: `@UUID[Scene.${stored}]{the old mill}` } }];
+  input.archived = [
+    { id: "world.archive-mill", title: "Archive: Mill", scenes: [{ id: stored, name: "Old Mill" }, { id: ID.hall, name: "Hall" }] },
+    { id: "world.empty", title: "Archive: restored", scenes: [{ id: ID.road, name: "Road" }] }
+  ];
+  const plan = planScenes(input);
+  assert.deepEqual(plan.archive.map(a => a.title), ["Archive: Mill"], "a pack whose scenes are all back in the world is not listed");
+  assert.deepEqual(plan.archive[0].names, ["Old Mill"], "Hall is in the world, so not archived");
+  assert.deepEqual(plan.archive[0].waysIn, [{ from: "Castle", fromFolder: "Barovia", to: "Old Mill" }]);
+  assert.deepEqual(plan.archive[0].journals, ["Burgomaster"]);
+  const castle = rowsByName(plan).Castle;
+  assert.match(sceneNote(castle), /leads into archived scenes: Old Mill \(Archive: Mill\)/);
+  const html = scenePlanToHtml(plan);
+  assert.ok(html.includes("In compendiums: 1 pack, 1 way in from the world"));
+  assert.ok(html.includes("Castle (Barovia) → Old Mill"));
+  assert.match(scenePlanToMarkdown(plan), /## Ways into archived areas\n\nBring the area back before players use one of these\.\n\n- Castle \(Barovia\) → Old Mill \(Archive: Mill\)/);
+});
+
