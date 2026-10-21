@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0
+
+Changes driven by player reports from the same heavy world:
+
+- **Frame rate fix**: the startup frame rate sample now counts rendered frames. It used to read PIXI's
+  `ticker.FPS`, which reports skipped frames under a frame cap, so a client capped at 30 fps on a 144 Hz screen
+  showed 63 fps.
+- **Waiting for the server**: the timeline and the headline now show when the world data arrived. Before that point
+  the page is idle while the server sends the world; a new finding says how long that took and that a faster
+  computer doesn't shorten it. In the reports so far it was 10 to 22 seconds on both computers measured.
+- **Token data**: the world data measurement breaks unlinked tokens' own data down by part (items, effects, system),
+  by sidebar actor, and token by token, and counts item copies that are identical to the sidebar actor's item apart
+  from timestamps. A new finding explains large item copies, and one flags linked tokens that still store data.
+- **Settings**: the largest individual world settings are listed, not just totals by package.
+- **Actor timing** also times the actors of unlinked tokens on every scene, which Foundry v13 builds at load.
+- The world data measurement moved to its own file that is only fetched while the hook profiler is on, keeping the
+  startup files at 46 KB, and the report shows how long the measurement took.
+- Resource timings that browsers report as negative no longer subtract from package totals.
+
 ## 0.2.2
 
 - Startup freezes now name what the measurements found inside them: the hook listener responsible (for example

@@ -10,8 +10,8 @@ Every client, the GM's and each player's, pays four separate bills. They have di
 which is why "disable modules until it's fast" is such a slow way to work.
 
 **1. Downloading.** Each active package adds JavaScript, CSS, templates and language files, and the world itself is
-sent as one large payload: every chat message, every world actor and item, and the compendium indexes of every active
-package. A thousand-plus files over a home connection with HTTP/1.1 is often the single largest part of load time.
+sent as one large payload: every scene with all its tokens, walls and lights, every chat message, every world actor
+and item, every world setting, and the compendium indexes of every active package. A thousand-plus files over a home connection with HTTP/1.1 is often the single largest part of load time.
 See [hosting.md](hosting.md).
 
 **2. Startup work.** Each module's code is parsed and run, then every module's `init`, `setup` and `ready` handlers run
@@ -56,6 +56,33 @@ that need it. That's what Performance Triage does.
    Often it's one or two modules and a few settings, not "too many modules".
 
 Re-run the report after each change; it's quick, and it keeps you from guessing.
+
+## Shrinking the world data
+
+Before a player's computer does anything, it waits for the server to send the whole world. The report's timeline
+marks when that data arrived; on the 140 MB world these notes were written against, every client waited 10 to 22
+seconds for it, a 16-thread desktop as long as an 8-thread work PC. Then the computer builds every document from it,
+which does depend on the CPU: about 10 seconds on the desktop and 23 on the work PC for the same world. A smaller
+world shortens both, for everyone, and it's the part a GM can work on between sessions.
+
+Turn on the hook profiler for one load to get the *World data sent to every client* section. In that world, scenes
+were three quarters of it, and most of that was unlinked tokens' own copies of their items. An unlinked token
+normally stores only what differs from its sidebar actor, but anything that rewrites every item on a token (a system
+migration, a module's bulk update) leaves a full copy of the actor's items in that token, on every scene. The report
+counts those copies, groups them by sidebar actor, and says how many are identical to the sidebar actor's items
+apart from timestamps.
+
+What helps, roughly in order of effort:
+
+- **Export scenes nobody is near.** Drag them into a world compendium (or export a whole scene folder from its context
+  menu), then delete them from the Scenes tab. A compendium is not sent at startup beyond its index, and the scene
+  comes back intact, tokens included, when you import it. Links that point at it (journal links, teleport regions)
+  need re-pointing afterwards.
+- **Replace unused tokens that carry copies.** Deleting a token and placing a fresh one from the sidebar actor drops
+  its copies. It also resets that token's HP, name and conditions, so do it for tokens the party hasn't met yet.
+- **Move NPCs you aren't using into a compendium.** Every world actor is sent to and prepared by every client.
+- **Check large world settings.** The report lists the largest ones. A module storing a big menu or cache in a world
+  setting costs every client on every load; its own options or its author can tell you whether it can be trimmed.
 
 ## The client profiles
 

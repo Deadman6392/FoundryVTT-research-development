@@ -295,26 +295,61 @@ function collectPlayers() {
   });
 }
 
+/** Let the browser paint between batches. The callback is defined here so long-frame timing credits this module. */
+const yieldToBrowser = () => new Promise(resolve => setTimeout(() => resolve(), 0));
+
+/** Time actor.reset() and describe the actor; slow or throwing actors are reported, never fatal. */
+function timeReset(actor) {
+  const t0 = performance.now();
+  try {
+    actor.reset();
+  } catch(err) {
+    console.warn(`${MODULE_ID} | Preparing ${actor.name} threw`, err);
+  }
+  return { ms: performance.now() - t0, items: actor.items?.size ?? 0, effects: actor.effects?.size ?? 0 };
+}
+
 /**
- * Re-prepare every world actor and time it. actor.reset() re-derives data exactly as an update does (dnd5e relies on
- * this), so the results reflect what every client pays at load and after each change to that actor.
+ * Re-prepare every world actor, and the actor of every unlinked token on every scene, and time it. actor.reset()
+ * re-derives data exactly as an update does (dnd5e relies on this), so the results reflect what every client pays
+ * at load and after each change to that actor.
+ *
+ * v14 defers unlinked tokens' actors until first use; TokenDocument#isLazyDelta and _preventActorDeltaAccess ("prevents
+ * ActorDelta documents from materializing until after all world documents are first initialized") exist only in
+ * the v14 API, so on v13 they are built with the world. On v14, tokens not built yet are skipped: timing them would
+ * build them, and they cost nothing at load.
  * Yields to the event loop periodically so the UI stays responsive on large worlds.
  */
 export async function benchmarkActors() {
   const rows = [];
   let total = 0;
   for ( const actor of game.actors ) {
-    const t0 = performance.now();
-    try {
-      actor.reset();
-    } catch(err) {
-      console.warn(`${MODULE_ID} | Preparing ${actor.name} threw`, err);
-    }
-    const elapsed = performance.now() - t0;
-    total += elapsed;
-    rows.push({ name: actor.name, type: actor.type, ms: Math.round(elapsed * 10) / 10, items: actor.items.size, effects: actor.effects.size });
-    if ( rows.length % 20 === 0 ) await new Promise(r => setTimeout(r, 0));
+    const r = timeReset(actor);
+    total += r.ms;
+    rows.push({ name: actor.name, type: actor.type, ms: Math.round(r.ms * 10) / 10, items: r.items, effects: r.effects });
+    if ( rows.length % 20 === 0 ) await yieldToBrowser();
   }
   rows.sort((a, b) => b.ms - a.ms);
-  return telemetry.prep = { count: rows.length, totalMs: Math.round(total), actors: rows.slice(0, 25) };
+
+  const tokenRows = [];
+  let tokenTotal = 0;
+  for ( const scene of game.scenes ?? [] ) {
+    for ( const token of scene.tokens ?? [] ) {
+      if ( token.actorLink || token.isLazyDelta ) continue;
+      const actor = token.actor;
+      if ( !actor ) continue;
+      const r = timeReset(actor);
+      tokenTotal += r.ms;
+      tokenRows.push({ name: token.name, scene: scene.name, ms: Math.round(r.ms * 10) / 10, items: r.items, effects: r.effects });
+      if ( tokenRows.length % 20 === 0 ) await yieldToBrowser();
+    }
+  }
+  tokenRows.sort((a, b) => b.ms - a.ms);
+
+  return telemetry.prep = {
+    count: rows.length,
+    totalMs: Math.round(total),
+    actors: rows.slice(0, 25),
+    tokens: { count: tokenRows.length, totalMs: Math.round(tokenTotal), rows: tokenRows.slice(0, 25) }
+  };
 }

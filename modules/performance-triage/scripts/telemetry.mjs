@@ -6,7 +6,7 @@
  * aggregates immediately and not retained. The hook profiler and payload measurement only run when opted in.
  */
 import { SELF_KEY, STORAGE_KEYS } from "./constants.mjs";
-import { ResourceAggregator, LongFrameAggregator, measurePayload } from "./lib/aggregate.mjs";
+import { ResourceAggregator, LongFrameAggregator } from "./lib/aggregate.mjs";
 import { createHookProfiler } from "./lib/hook-profiler.mjs";
 
 export const telemetry = {
@@ -52,8 +52,16 @@ export function bootstrap() {
   if ( readStorageFlag(STORAGE_KEYS.hookProfiler) ) {
     telemetry.hookProfiler = createHookProfiler({ hooks: Hooks, selfKey: SELF_KEY, origin });
     telemetry.hookProfiler.install();
+    // Only needed while profiling, so it is fetched here instead of on every load. Scripts finish seconds before
+    // the world data arrives, so the file is in long before init and the measurement runs right after the init
+    // hook, before setup builds the world from game.data. Timed so the report can state its cost.
+    const payload = import("./lib/payload.mjs");
     Hooks.once("init", () => {
-      telemetry.payload = measurePayload(game.data);
+      payload.then(({ measurePayload }) => {
+        const t0 = performance.now();
+        telemetry.payload = measurePayload(game.data);
+        telemetry.payload.ms = Math.round(performance.now() - t0);
+      }).catch(err => console.warn("performance-triage | Could not measure the world data", err));
     });
   }
 
@@ -147,8 +155,12 @@ export function countFps(ms) {
 }
 
 /**
- * Sample the canvas frame rate for a short window after startup, skipping samples while the tab is hidden,
+ * Sample the canvas frame rate for a short window after startup, skipping intervals in which the tab was hidden,
  * unfocused or throttled by the idle controller, so the number reflects what the player actually sees.
+ *
+ * Frames are counted rather than read from `ticker.FPS`: PIXI 7's Ticker#update sets `elapsedMS` before it checks
+ * the frame cap and returns early, so under a cap below the display rate `FPS` mostly reports skipped frames. A
+ * 30 fps cap on a 144 Hz screen read as 63 fps that way. Cost: one increment per rendered frame for `seconds`.
  * @param {() => boolean} isThrottled
  * @returns {Promise<{target: number, achieved: number, samples: number}|null>}
  */
@@ -156,12 +168,39 @@ export function sampleFps(isThrottled, { seconds = 60, every = 5 } = {}) {
   return new Promise(resolve => {
     const values = [];
     let elapsed = 0;
+    let frames = 0;
+    let ticker = null;
+    const count = () => frames++;
+    const currentTicker = () => {
+      const t = globalThis.canvas?.ready ? canvas.app?.ticker : null;
+      return (typeof t?.add === "function") ? t : null;
+    };
+    const usable = () => !document.hidden && document.hasFocus() && !isThrottled();
+    // Attach to whichever ticker is live (none while the canvas is torn down between scenes); an interval only
+    // counts if it ran on one ticker and was usable at both ends
+    const attach = () => {
+      const t = currentTicker();
+      if ( t === ticker ) return false;
+      ticker?.remove(count);
+      ticker = t;
+      ticker?.add(count);
+      return true;
+    };
+    attach();
+    let since = performance.now();
+    let wasUsable = usable();
     const timer = setInterval(() => {
       elapsed += every;
-      const ticker = globalThis.canvas?.ready ? canvas.app?.ticker : null;
-      if ( ticker && !document.hidden && document.hasFocus() && !isThrottled() ) values.push(ticker.FPS);
+      const now = performance.now();
+      const isUsable = usable();
+      const switched = attach();
+      if ( ticker && !switched && wasUsable && isUsable ) values.push((frames * 1000) / (now - since));
+      frames = 0;
+      since = now;
+      wasUsable = isUsable;
       if ( elapsed < seconds ) return;
       clearInterval(timer);
+      ticker?.remove(count);
       if ( !values.length ) return resolve(null);
       const target = canvas.performance?.fps || 60;
       const achieved = values.reduce((a, b) => a + b, 0) / values.length;

@@ -85,3 +85,27 @@ test("benchmarkActors times every world actor and sorts the slowest first", asyn
   assert.equal(prep.actors[0].name, "Lich");
   assert.ok(prep.actors[0].ms >= 5);
 });
+
+test("benchmarkActors also times unlinked tokens' actors, skipping linked tokens and ones not built yet", async () => {
+  const synthetic = actor("Zombie", 12, 1);
+  const lazy = { name: "Lazy", actorLink: false, isLazyDelta: true, get actor() { throw new Error("would build the delta"); } };
+  const scenes = collection([{
+    name: "Crypt",
+    tokens: collection([
+      { name: "Zombie", actorLink: false, actor: synthetic },
+      { name: "Hero", actorLink: true, actor: actors[0] },
+      { name: "Orphan", actorLink: false, actor: null },
+      lazy
+    ])
+  }]);
+  const previous = game.scenes;
+  game.scenes = scenes;
+  try {
+    const prep = await benchmarkActors();
+    assert.equal(prep.count, 2, "world actors are still timed");
+    assert.equal(prep.tokens.count, 1);
+    assert.deepEqual([prep.tokens.rows[0].name, prep.tokens.rows[0].scene, prep.tokens.rows[0].items], ["Zombie", "Crypt", 12]);
+  } finally {
+    game.scenes = previous;
+  }
+});

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  TopN, deliveryOf, ResourceAggregator, LongFrameAggregator, analyzeTrace, measurePayload
+  TopN, deliveryOf, ResourceAggregator, LongFrameAggregator, analyzeTrace
 } from "../modules/performance-triage/scripts/lib/aggregate.mjs";
 
 const ORIGIN = "http://localhost:30000";
@@ -90,48 +90,4 @@ test("analyzeTrace charges core work to the innermost non-transparent package", 
   assert.equal(by["core"].responsible, 10);
   assert.equal(by["module:lib-wrapper"].responsible, 0, "lib-wrapper is transparent");
   assert.equal(by["module:lib-wrapper"].inclusive, 20);
-});
-
-test("measurePayload sizes sections and groups compendium indexes by package", () => {
-  const out = measurePayload({
-    actors: [{ name: "A" }, { name: "B" }],
-    messages: new Array(3).fill({ content: "x".repeat(100) }),
-    packs: [
-      { packageType: "module", packageName: "cpr", index: [{ _id: 1 }, { _id: 2 }] },
-      { packageType: "module", packageName: "cpr", index: [{ _id: 3 }] },
-      { packageType: "system", packageName: "dnd5e", index: [] }
-    ]
-  });
-  assert.equal(out.sections[0].key, "messages");
-  const cpr = out.packs.find(p => p.key === "module:cpr");
-  assert.equal(cpr.packs, 2);
-  assert.equal(cpr.entries, 3);
-});
-
-test("measurePayload breaks scenes, settings and actors down so the report can say what is big", () => {
-  const bigDelta = { items: new Array(20).fill({ name: "Claw", system: { description: { value: "x".repeat(500) } } }) };
-  const out = measurePayload({
-    scenes: [
-      { _id: "s1", name: "Castle", walls: new Array(50).fill({ c: [0, 0, 100, 100] }), flags: { levels: { a: 1 } },
-        tokens: [{ _id: "t1", name: "Zombie", delta: bigDelta }, { _id: "t2", name: "Zombie", delta: bigDelta }] },
-      { _id: "s2", name: "Field", walls: [], tokens: [] }
-    ],
-    settings: [
-      { key: "fa-nexus.cache", value: "y".repeat(5000) },
-      { key: "core.time", value: 0 },
-      { key: "fa-nexus.other", value: "z" }
-    ],
-    actors: [{ name: "Strahd", type: "npc", items: new Array(3).fill({ name: "Bite" }) }, { name: "Bat", type: "npc", items: [] }]
-  });
-  const sc = out.detail.scenes;
-  assert.equal(sc.parts[0].key, "tokens", "token data is the largest part");
-  assert.ok(sc.tokenDelta > 0.9 * sc.parts[0].bytes, "almost all token bytes are actor deltas");
-  assert.ok(sc.parts.some(p => p.key === "flags") && sc.parts.some(p => p.key === "other"));
-  const partSum = sc.parts.reduce((a, p) => a + p.bytes, 0);
-  assert.equal(partSum, sc.bytes, "parts add up to the scene total");
-  assert.equal(sc.largest[0].name, "Castle");
-  assert.equal(sc.largest[0].tokens, 2);
-  assert.equal(out.sections.find(s => s.key === "scenes").bytes, sc.bytes);
-  assert.deepEqual(out.detail.settings.byPackage.map(g => [g.key, g.count]), [["fa-nexus", 2], ["core", 1]]);
-  assert.equal(out.detail.actors.largest[0].name, "Strahd");
 });

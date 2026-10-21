@@ -5,7 +5,7 @@
  */
 import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
-import { phasesWithin } from "./frames.mjs";
+import { phasesWithin, worldDataWait } from "./frames.mjs";
 import { SELF_KEY } from "../constants.mjs";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
@@ -61,8 +61,14 @@ function freezeCulprits(phases, report) {
       .join(", ") + ".");
   }
   if ( (kind === "setup") && report.prep?.totalMs ) {
-    notes.push(`Re-preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer, `
-      + "so actors account for roughly that much; the rest is most likely building scenes and other world documents.");
+    const tokens = report.prep.tokens;
+    const tokenNote = tokens?.count
+      ? ` and the actors of ${tokens.count} unlinked tokens on all scenes ${secs(tokens.totalMs)} (Foundry v13 builds `
+        + "these with their scenes at load)"
+      : "";
+    notes.push(`Re-preparing all ${report.prep.count} world actors takes ${secs(report.prep.totalMs)} on this computer`
+      + `${tokenNote}, so actors account for roughly that much; the rest is most likely building scenes and other `
+      + "world documents.");
   }
   return notes.join(" ");
 }
@@ -156,18 +162,44 @@ export function recommend(report) {
     if ( scenes && (scenes.bytes > 20 * MB) ) {
       const parts = scenes.parts.slice(0, 4).map(p => `${p.key} ${mb(p.bytes)}`).join(", ");
       const delta = scenes.tokenDelta > 0.25 * scenes.bytes
-        ? ` Unlinked tokens' own copies of actor data are ${mb(scenes.tokenDelta)} of that.` : "";
+        ? ` Unlinked tokens' own actor data (their "delta") is ${mb(scenes.tokenDelta)} of that.` : "";
       add("high", "World", `Scenes are ${mb(scenes.bytes)} of the world data`,
         `By part: ${parts}.${delta} Largest scenes: `
         + scenes.largest.slice(0, 5).map(x => `${x.name} ${mb(x.bytes)} (${x.tokens} tokens, ${x.walls} walls)`).join("; ")
         + ". Every scene in the world is sent to every client at load, including ones nobody is using.",
         "Export scenes the party isn't near to a compendium and delete them from the world; bring them back when "
-        + "needed. Unlinked tokens on a scene each carry a full copy of their actor, so trimming unused tokens helps too.");
+        + "needed. Links that point at an exported scene (journal links, teleport regions) need re-pointing after "
+        + "you bring it back.");
+    }
+    const tk = scenes?.tokens;
+    const itemBytes = tk?.parts?.find(p => p.key === "items")?.bytes ?? 0;
+    if ( tk && (itemBytes > 10 * MB) ) {
+      const byActor = tk.byActor.filter(g => g.items).slice(0, 4)
+        .map(g => `${g.actor ?? "a deleted actor"} (${plural(g.tokens, "token")}, ${mb(g.bytes)})`).join("; ");
+      const same = tk.same.items
+        ? ` ${tk.same.items} of those copies (${mb(tk.same.bytes)}) are identical to the sidebar actor's item apart `
+          + "from timestamps, so they add size without making the token any different."
+        : "";
+      add("high", "World", `Unlinked tokens store ${mb(itemBytes)} of their own item copies`,
+        `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${same} An `
+        + "unlinked token normally stores only what differs from its sidebar actor; a full set of copies is what "
+        + "is left after something rewrote every item on the token (a system migration or a bulk update by a "
+        + `module). Most of it belongs to: ${byActor}.`,
+        "Exporting scenes you aren't using removes their tokens' data from the load. On scenes you keep, deleting a "
+        + "token and placing a fresh one from the sidebar actor drops the copies, but also resets that token's HP, "
+        + "name and conditions, so do it for tokens that haven't been used yet.");
+    }
+    if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {
+      add("low", "World", `${plural(tk.linkedDelta.tokens, "linked token")} still store ${mb(tk.linkedDelta.bytes)} of actor data`,
+        "A linked token uses its sidebar actor, so its own stored items and effects are not used while it stays "
+        + "linked; they are still sent to every client.", "");
     }
     const settings = payload.detail?.settings;
     if ( settings && (settings.bytes > 2 * MB) ) {
+      const keys = (settings.largest ?? []).filter(x => x.bytes > 0.25 * MB).slice(0, 5);
       add("medium", "World", `World settings are ${mb(settings.bytes)}`,
         "Largest by package: " + settings.byPackage.slice(0, 5).map(g => `${g.key} ${mb(g.bytes)}`).join(", ")
+        + (keys.length ? `. Largest settings: ${keys.map(x => `${x.key} ${mb(x.bytes)}`).join(", ")}` : "")
         + ". Settings are loaded by every client; a module storing large data there costs everyone.",
         "Check that module's options for stored history or caches you can clear, or report it to its author.");
     }
@@ -224,6 +256,19 @@ export function recommend(report) {
       `From ${secs(frame.start)} to ${secs(frame.start + frame.duration)} after page load`
       + (phases.length ? `, spanning ${phases.join(", ")}` : "") + ". " + (found || explainFreeze(phases)),
       "", found ? [] : [freezeAction(phases, can)]);
+  }
+
+  // Waiting for the world: the page is idle until the server has sent all of it
+  const wait = worldDataWait(report.timeline, report.longFrames?.load?.worst);
+  if ( wait && (wait.ms > 5000) ) {
+    const size = report.payload?.sections?.reduce((a, x) => a + x.bytes, 0);
+    add(wait.ms > 15000 ? "high" : "medium", "Startup", `This computer waited ${secs(wait.ms)} for the world data`,
+      `The page sat idle from ${secs(wait.from)} to ${secs(wait.to)} after load, waiting for the server to send the `
+      + `world${size ? ` (${mb(size)})` : ""}. That is the server reading and sending it plus the download, so a `
+      + "faster computer does not shorten it; a smaller world does.",
+      "Shrink the world data (see the World findings). Compare players' reports: if everyone waits about as long, "
+      + "it is the server and the world size; if one player waits much longer, it is their connection.",
+      [!size && can.hookProfiler]);
   }
 
   // Modules
