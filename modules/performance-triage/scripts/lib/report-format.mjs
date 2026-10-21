@@ -87,7 +87,7 @@ function sections(report, opts = {}) {
       + "computer is building the world. \"ready hook fired\" is when Foundry starts calling ready handlers; the "
       + "game is usable once they finish.",
     tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) },
-      ...historyTables(report.history)]
+      ...historyTables(report.history, report.env?.user)]
   });
 
   // Network
@@ -324,19 +324,21 @@ function sections(report, opts = {}) {
 }
 
 /** Earlier loads on this computer, newest first, recorded a minute after each load. */
-function historyTables(history) {
+function historyTables(history, user) {
   if ( !history?.length ) return [];
   const when = at => {
     const d = new Date(at);
     return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
   };
-  const usable = median(history.map(h => h.usable));
+  // Several logins can share one browser (a GM testing as a player), and a GM's load differs from a player's
+  const mine = history.filter(h => !h.user || !user || (h.user === user));
+  const usable = median(mine.map(h => h.usable));
   return [{
-    caption: `Load history on this computer: ${history.length} load${history.length === 1 ? "" : "s"}, median time `
-      + `until usable ${fmtMs(usable)}. Server waits vary between loads, so compare several.`,
-    head: ["When", "Until usable", "Waiting for server", "Building (init to setup)", "Ready handlers", "Scenes",
+    caption: `Load history in this browser: ${history.length} load${history.length === 1 ? "" : "s"}; median time `
+      + `until usable${user ? ` for ${user}` : ""} ${fmtMs(usable)}. Server waits vary between loads, so compare several.`,
+    head: ["When", "User", "Until usable", "Waiting for server", "Building (init to setup)", "Ready handlers", "Scenes",
       "Tokens", "World data", "Frame rate", "Profile"],
-    rows: history.map(h => [when(h.at), fmtMs(h.usable), fmtMs(h.wait), fmtMs(h.build), fmtMs(h.readyHandlers),
+    rows: history.map(h => [when(h.at), h.user ? `${h.user}${h.gm ? " (GM)" : ""}` : "–", fmtMs(h.usable), fmtMs(h.wait), fmtMs(h.build), fmtMs(h.readyHandlers),
       h.scenes ?? "–", h.tokens ?? "–", Number.isFinite(h.worldBytes) ? fmtBytes(h.worldBytes) : "–",
       Number.isFinite(h.fps) ? `${h.fps} fps` : "–", h.profile ?? "–"])
   }];
@@ -374,9 +376,20 @@ function payloadDetailTables(detail) {
         ]
       });
       tables.push({
-        caption: "Token data by sidebar actor", head: ["Actor", "Tokens", "Size", "Item copies"],
-        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items])
+        caption: "Token data by the sidebar actor the tokens are based on (tokens are often renamed)",
+        head: ["Actor", "Tokens", "Size", "Item copies", "Token names"],
+        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items,
+          (g.names ?? []).map(n => (n.count > 1 ? `${n.name} ×${n.count}` : n.name)).join(", ")
+            + ((g.distinctNames ?? 0) > (g.names?.length ?? 0) ? `, and ${g.distinctNames - g.names.length} more` : "")])
       });
+      if ( tk.repeated?.top?.length ) {
+        tables.push({
+          caption: `Items repeated on many tokens: ${tk.repeated.items} copies, ${fmtBytes(tk.repeated.bytes)}. Same `
+            + "name, type and size on at least 5 tokens, and not on the sidebar actor.",
+          head: ["Item", "Type", "Tokens", "Size", "Flags from"],
+          rows: tk.repeated.top.map(r => [r.name, r.type, r.tokens, fmtBytes(r.bytes), r.flags.join(", ") || "–"])
+        });
+      }
       tables.push({
         caption: "Largest tokens", head: ["Token", "Scene", "Linked", "Size", "Item copies", "Effects"],
         rows: tk.largest.map(t => [t.name, t.scene, t.linked ? "yes" : "no", fmtBytes(t.bytes), t.items, t.effects])

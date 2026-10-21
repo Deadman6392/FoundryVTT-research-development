@@ -196,19 +196,32 @@ export function recommend(report) {
         ? ` ${tk.added.duplicates} of the added items share a name and type with an item the sidebar actor already `
           + `has, so those tokens probably show that item twice${examples ? `: ${examples}` : ""}.`
         : "";
+      // The same few items on many tokens is what a module adding actions to every placed token leaves behind
+      const rep = tk.repeated;
+      const repeatedNote = (rep?.bytes > 0.25 * itemBytes)
+        ? ` ${mb(rep.bytes)} of it is the same items repeated on many tokens: `
+          + rep.top.slice(0, 6).map(r => `${r.name} (${r.tokens} tokens)`).join(", ")
+          + (rep.top[0]?.flags?.length ? `. They carry flags from ${[...new Set(rep.top.flatMap(r => r.flags))].slice(0, 3).join(", ")}, a hint at what added them.` : ".")
+        : "";
       // When most copies are items the sidebar actor lacks, the tokens are the only place those items exist
       const tokensOwnItems = tk.added && (added > tk.items / 2);
-      const fix = tokensOwnItems
+      const repeatedFix = repeatedNote
+        ? " If a module adds those items to every token when it is placed, check whether it can add them to the "
+          + "sidebar actor instead, or skip NPCs: one copy per actor instead of one per token. Copies already on tokens "
+          + "stay until removed."
+        : "";
+      const fix = (tokensOwnItems
         ? "Archive scenes you aren't using; that removes their tokens' data from the load. Don't replace these tokens "
           + "with fresh ones from the sidebar actors to save space: most of their items exist only on the tokens, so "
           + "a fresh token would be missing them."
         : "Archiving scenes you aren't using removes their tokens' data from the load. On scenes you keep, a token "
           + "placed fresh from the sidebar actor carries no copies, but it is the sidebar actor's current version with "
-          + "HP, name and conditions reset, so only replace tokens the party hasn't met.";
+          + "HP, name and conditions reset, so only replace tokens the party hasn't met.") + repeatedFix;
       add("high", "World", `Unlinked tokens store ${mb(itemBytes)} of their own item copies`,
         `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${split}${doubled} `
         + "An unlinked token normally stores only what differs from its sidebar actor, so a full set of copies means "
-        + `each token carries its own version of every item. Most of it belongs to: ${byActor}.`,
+        + `each token carries its own version of every item.${repeatedNote} By the sidebar actor the tokens are based `
+        + `on: ${byActor}.`,
         fix, [can.scenePlan]);
     }
     if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {

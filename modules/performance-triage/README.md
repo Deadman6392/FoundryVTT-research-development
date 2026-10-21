@@ -33,10 +33,12 @@ trigger in another area leads to it), "small" or "in use now" (the active scene,
 Links from journal entries and macros are listed but need no prep: with IDs kept they work again when the scene comes
 back. **Time token actors** adds how long each scene's unlinked tokens take to prepare, and **Copy prep checklist**
 copies a per-area Markdown checklist with the archive and restore steps. Once areas are archived, *In compendiums*
-lists the world's Scene compendiums and the teleport regions or tile triggers in world scenes that lead into them. It reads the world and changes nothing; the
+lists the world's Scene compendiums and the teleport regions or tile triggers in world scenes that lead into them.
+Maps players have explored are marked, because archiving deletes their explored fog of war (it doesn't come back with
+the scene); the planner asks the server for an index of fog records (scene and user only) when it opens. It reads the world and changes nothing; the
 archiving itself is done with Foundry's own Export to Compendium and Import All, keeping IDs.
 
-**Load history** (in the report's timeline): the last 20 loads on this computer, with time until usable, the wait for
+**Load history** (in the report's timeline): the last 20 loads in this browser, labelled with who logged in, with time until usable, the wait for
 the server, the world build, ready handlers, scene and token counts and the frame rate, so the effect of a change
 (archiving an area, disabling a module) shows up as numbers.
 

@@ -121,3 +121,18 @@ test("token item copies are split into matching, differing and added items, and 
   assert.deepEqual(t.added, { items: 2, duplicates: 1, examples: [{ scene: "Crypt", token: "Ghoul", items: ["Claw"] }] });
 });
 
+test("items added to many tokens are grouped by name, type and size, and token names are kept per actor", () => {
+  const base = { _id: "a1", name: "Mongrelfolk", items: [{ _id: "b1", name: "Bite", type: "weapon" }] };
+  const action = (id, name) => ({ _id: id.padEnd(16, "x"), name, type: "feat", system: { activation: "action" }, flags: { "chris-premades": { generic: true } } });
+  const tokens = Array.from({ length: 6 }, (_, i) => ({
+    _id: `t${i}`, name: i < 2 ? "Mongrelfolk" : `Villager ${i}`, actorId: "a1", actorLink: false,
+    delta: { items: [action(`d${i}`, "Dash"), action(`s${i}`, "Shove"), ...(i === 0 ? [action("u0", "Unique trick")] : [])] }
+  }));
+  const t = measurePayload({ actors: [base], scenes: [{ _id: "s1", name: "Abbey", tokens }] }).detail.scenes.tokens;
+  assert.deepEqual(t.repeated.top.map(r => [r.name, r.tokens, r.flags]), [["Shove", 6, ["chris-premades"]], ["Dash", 6, ["chris-premades"]]], "largest share first");
+  assert.equal(t.repeated.items, 12, "the one-off item is not counted as repeated");
+  const g = t.byActor[0];
+  assert.deepEqual([g.actor, g.tokens, g.distinctNames], ["Mongrelfolk", 6, 5]);
+  assert.deepEqual(g.names[0], { name: "Mongrelfolk", count: 2 });
+});
+

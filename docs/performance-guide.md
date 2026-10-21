@@ -83,11 +83,17 @@ What helps, roughly in order of effort:
   any in use. A compendium is not sent at startup beyond its index. To bring the area back, use that compendium's
   *Import All* with its keep-ID option ticked; with the same IDs, journal links, teleport regions, tile triggers and
   map notes work again. Dragging a single scene out of a compendium can give it a new ID, so one compendium per area
-  is easier than one big archive. Try the round trip on one small area first, and check that explored fog survives
-  it. Once areas are archived, the planner's *In compendiums* section lists them and the teleport regions or tile
+  is easier than one big archive. Archiving deletes players' explored fog of war on those maps, and it doesn't come
+  back with them: the planner marks maps players have explored, so archive areas the party hasn't been to first, or
+  accept that they'll be unexplored again. Once areas are archived, the planner's *In compendiums* section lists them and the teleport regions or tile
   triggers in the world that lead into them, so you know which exits need the area brought back first.
 - **Check large world settings.** The report lists the largest ones. A module storing a big menu or cache in a world
   setting costs every client on every load; its own options or its author can tell you whether it can be trimmed.
+- **Look at items repeated on many tokens.** The report lists items with the same name and size on at least five
+  tokens that the sidebar actor doesn't have, with the module flags they carry. In the world above they were generic
+  actions (Dash, Shove, Hide, Stabilize...) that a module adds to every token when it's placed, which is why one
+  token can weigh as much as a whole actor. If the module can add them to the sidebar actor instead, or skip NPCs,
+  each actor holds one copy instead of every token holding its own. Copies already on tokens stay until removed.
 - **Don't replace tokens to save space unless you've checked.** A token placed fresh from the sidebar actor carries
   no copies, but when the report says most copies are items the sidebar actor doesn't have, a fresh token would be
   missing them. Archiving the scene is the safe way to take those tokens out of the load.

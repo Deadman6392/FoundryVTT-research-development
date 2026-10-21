@@ -35,7 +35,32 @@ function archivedScenes() {
   return out;
 }
 
-export function collectScenePlan() {
+/**
+ * Scene id -> names of players who have explored fog of war there. FogExploration documents aren't loaded with the
+ * world, so this asks the server for an index of them (scene and user only). Null when that isn't possible.
+ */
+async function exploredScenes() {
+  const cls = CONFIG.FogExploration?.documentClass;
+  if ( typeof cls?.database?.get !== "function" ) return null;
+  try {
+    const entries = await cls.database.get(cls, { query: {}, index: true, indexFields: ["scene", "user"] });
+    const players = new Map();
+    for ( const u of game.users ) if ( !u.isGM ) players.set(u.id, u.name);
+    const out = new Map();
+    for ( const e of entries ?? [] ) {
+      const name = players.get(e.user);
+      if ( !name || !e.scene ) continue;
+      if ( !out.has(e.scene) ) out.set(e.scene, []);
+      if ( !out.get(e.scene).includes(name) ) out.get(e.scene).push(name);
+    }
+    return out;
+  } catch(err) {
+    console.warn("performance-triage | Could not read which scenes players have explored", err);
+    return null;
+  }
+}
+
+export async function collectScenePlan() {
   // Never suggest archiving a scene someone is on
   const inUse = new Set();
   for ( const scene of game.scenes ) if ( scene.active ) inUse.add(scene.id);
@@ -52,6 +77,7 @@ export function collectScenePlan() {
     playerActors,
     folders: folderPaths(),
     prepMs: byScene ? new Map(byScene.map(s => [s.id, s.ms])) : null,
-    archived: archivedScenes()
+    archived: archivedScenes(),
+    explored: await exploredScenes()
   });
 }

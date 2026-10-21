@@ -18,13 +18,18 @@ const round = n => (Number.isFinite(n) ? Math.round(n) : null);
  * @param {number|null} [input.worldBytes]  World data size, when the hook profiler measured it
  * @param {number|null} [input.fps]
  * @param {string} [input.profile]
+ * @param {string} [input.user]       Who logged in: one browser can be used for several logins, sharing storage
+ * @param {boolean} [input.gm]
  * @param {number} [input.now]
  */
-export function loadEntry({ timeline, frames, counts = {}, worldBytes = null, fps = null, profile = "none", now = Date.now() }) {
+export function loadEntry({ timeline, frames, counts = {}, worldBytes = null, fps = null, profile = "none", user = "",
+  gm = false, now = Date.now() }) {
   const marks = timeline?.marks ?? {};
   const wait = worldDataWait(timeline, frames);
   return {
     at: now,
+    user,
+    gm,
     usable: round(settledAt(marks.readyComplete, frames) ?? marks.readyComplete ?? marks.ready),
     wait: round(wait?.ms),
     build: round(marks.setup - marks.init),

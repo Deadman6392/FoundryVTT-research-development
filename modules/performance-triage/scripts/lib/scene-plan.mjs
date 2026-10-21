@@ -83,9 +83,11 @@ const sameArea = (a, b) => !!a && (a === b);
  * @param {Map<string, number>} [input.prepMs]    Scene id -> time to prepare its unlinked tokens' actors, if measured
  * @param {{id: string, title: string, scenes: {id: string, name: string}[]}[]} [input.archived]
  *   Scene compendiums in this world and the scenes in them, from their indexes
+ * @param {Map<string, string[]>|null} [input.explored]  Scene id -> names of players with explored fog there, or null
+ *   when that couldn't be read
  */
 export function planScenes({ scenes, journals = [], macros = [], inUse = new Set(), playerActors = new Set(),
-  folders = new Map(), prepMs = null, archived = [] }) {
+  folders = new Map(), prepMs = null, archived = [], explored = null }) {
   const ids = new Set(scenes.map(s => s?._id).filter(Boolean));
   // A scene that is in the world as well as a compendium (kept after a restore) is not archived
   const archivedById = new Map();
@@ -161,12 +163,13 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
       entrances: links.filter(l => !sameArea(folderOf(l.id), folderId)),
       docLinks: docLinks.get(scene?._id) ?? [],
       exitsToArchive: exits.get(scene?._id) ?? [],
+      exploredBy: explored?.get(scene?._id) ?? [],
       navigation: scene?.navigation === true,
       inUse: inUse.has(scene?._id)
     };
     row.status = row.inUse ? "inUse"
       : (row.bytes < SMALL_SCENE_BYTES) ? "small"
-        : (row.pinned.length || row.entrances.length) ? "prep" : "ready";
+        : (row.pinned.length || row.entrances.length || row.exploredBy.length) ? "prep" : "ready";
     return row;
   });
 
@@ -186,7 +189,7 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
     let a = areas.get(key);
     if ( !a ) {
       areas.set(key, a = { id: r.folderId, folder: r.folder, scenes: [], bytes: 0, saves: 0,
-        ready: 0, prep: 0, small: 0, inUse: 0, pinned: new Map(), entrances: [] });
+        ready: 0, prep: 0, small: 0, inUse: 0, pinned: new Map(), entrances: [], explored: [] });
     }
     a.scenes.push(r);
     a.bytes += r.bytes;
@@ -196,6 +199,7 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
     a.saves += r.bytes;
     for ( const p of r.pinned ) a.pinned.set(p.id, p.name);
     for ( const e of r.entrances ) a.entrances.push({ from: e.name, fromFolder: e.folder, to: r.name });
+    if ( r.exploredBy.length ) a.explored.push(r.name);
   }
   const areaList = [...areas.values()].map(a => ({ ...a, pinned: [...a.pinned.values()].sort() }));
   // Scenes outside any folder are listed together at the end: each has to be moved into a folder to export it
@@ -203,12 +207,13 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
   const folderAreas = areaList.filter(a => a.id).sort((a, b) => b.saves - a.saves);
   if ( loose.length ) {
     const merged = { id: "", folder: "", scenes: [], bytes: 0, saves: 0, ready: 0, prep: 0, small: 0, inUse: 0,
-      pinned: [], entrances: [] };
+      pinned: [], entrances: [], explored: [] };
     for ( const a of loose ) {
       merged.scenes.push(...a.scenes);
       for ( const k of ["bytes", "saves", "ready", "prep", "small", "inUse"] ) merged[k] += a[k];
       merged.pinned.push(...a.pinned);
       merged.entrances.push(...a.entrances);
+      merged.explored.push(...a.explored);
     }
     merged.pinned = [...new Set(merged.pinned)].sort();
     folderAreas.push(merged);
@@ -229,6 +234,7 @@ export function planScenes({ scenes, journals = [], macros = [], inUse = new Set
   return {
     totalBytes: rows.reduce((a, r) => a + r.bytes, 0),
     hasPrepTimes: !!prepMs,
+    fogKnown: !!explored,
     archive,
     rows,
     areas: folderAreas,
@@ -271,6 +277,7 @@ export function sceneNote(row) {
   if ( row.exitsToArchive?.length ) {
     parts.push(`leads into archived scenes: ${list(row.exitsToArchive.map(e => `${e.name} (${e.pack})`))}`);
   }
+  if ( row.exploredBy?.length ) parts.push(`explored by ${list(row.exploredBy)}: their fog of war here resets if it is archived`);
   if ( row.playerTokens ) parts.push(`${row.playerTokens} player character token${row.playerTokens === 1 ? "" : "s"}`);
   if ( row.navigation ) parts.push("in the navigation bar");
   return parts.join("; ");
@@ -292,14 +299,16 @@ export const PLAN_STEPS = [
     + "journal links, teleport regions and tile triggers that point at those scenes work again, and their map notes "
     + "open the same journal entries, which never left the world. Dragging one scene out of a compendium can give "
     + "it a new ID, which breaks those links.",
-  "Try the round trip with one small area first, and check that explored fog on its maps survives it."
+  "Archiving deletes players' explored fog of war on those maps, and bringing them back starts everyone fresh. The "
+    + "planner marks maps players have explored; areas the party hasn't been to cost nothing to archive."
 ];
 
 /** What "after prep" means, for the window and the checklist. */
 export const PREP_NOTE = "\"After prep\" means the area has journal entries on its maps, which you may want to reach "
-  + "from the Journal tab while the maps are archived, or ways in from scenes that stay in the world, such as a "
-  + "teleport region; if players head through one, bring the area back first. Links from journal entries and macros "
-  + "are listed too: they don't work while a scene is archived, and work again once it is back with the same ID.";
+  + "from the Journal tab while the maps are archived; ways in from scenes that stay in the world, such as a "
+  + "teleport region (if players head through one, bring the area back first); or maps players have explored, whose "
+  + "fog of war would reset. Links from journal entries and macros are listed too: they don't work while a scene is "
+  + "archived, and work again once it is back with the same ID.";
 
 function areaTitle(a) {
   return a.id ? a.folder : "Scenes outside any folder";
@@ -319,6 +328,9 @@ function areaNotes(a) {
   if ( inUse.length ) notes.push(`In use now, keep in the world: ${list(inUse)}.`);
   if ( a.pinned.length ) notes.push(`Journal entries on these maps: ${list(a.pinned)}.`);
   if ( a.entrances.length ) notes.push(`Ways in from scenes that stay: ${list(a.entrances.map(entranceText))}.`);
+  if ( a.explored?.length ) {
+    notes.push(`Explored by players, fog resets if archived: ${list(a.explored)}.`);
+  }
   return notes;
 }
 
@@ -383,6 +395,8 @@ export function scenePlanToHtml(plan, { open = new Set(["areas"]), measuredMs = 
   }).join("");
 
   const unlinked = plan.rows.reduce((a, r) => a + r.unlinked, 0);
+  const fogNote = plan.fogKnown ? "" : `<p>${esc("Which maps players have explored couldn't be read, so explored fog "
+    + "isn't taken into account below. Archiving a map resets players' fog of war on it.")}</p>`;
   const timing = plan.hasPrepTimes ? "" : `<p>${esc("\"Time token actors\" adds a column with how long each "
     + "scene's unlinked tokens take to prepare. Each player pays that when the scene is first drawn, and the GM pays "
     + "it for every scene at every load while a module such as Sequencer checks every token. It re-prepares all "
@@ -401,7 +415,7 @@ export function scenePlanToHtml(plan, { open = new Set(["areas"]), measuredMs = 
     <details class="ptriage-section" data-section="steps"${isOpen("steps")}><summary>How to archive an area and bring it back</summary>
       <ol>${PLAN_STEPS.map(s => `<li>${esc(s)}</li>`).join("")}</ol><p>${esc(PREP_NOTE)}</p></details>
     <details class="ptriage-section" data-section="areas"${isOpen("areas")}><summary>Areas (scene folders), most to gain first</summary>
-      ${timing}${areas}</details>
+      ${fogNote}${timing}${areas}</details>
     ${archiveHtml(plan, isOpen)}
     <details class="ptriage-section" data-section="all"${isOpen("all")}><summary>All scenes, best candidates first</summary>
       ${sceneTable(plan.rows, plan.hasPrepTimes)}</details>`;

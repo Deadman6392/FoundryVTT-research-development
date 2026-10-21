@@ -273,7 +273,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
     /some-module 6\.0 MB\. Largest settings: some-module\.cache 5\.0 MB\. /);
   assert.match(findings.find(f => f.title.startsWith("World actors are")).detail, /Strahd 1\.0 MB \(58 items\)/);
   const html = reportToHtml({ ...report, findings });
-  for ( const caption of ["Largest scenes", "Token data by sidebar actor", "Largest tokens", "Largest world settings"] ) {
+  for ( const caption of ["Largest scenes", "Token data by the sidebar actor", "Largest tokens", "Largest world settings"] ) {
     assert.ok(html.includes(caption), caption);
   }
 });
@@ -311,5 +311,34 @@ test("a known listener in a freeze gets an explanation, and leftover textures ar
   const tex = findings.find(f => f.title.startsWith("Textures use about"));
   assert.match(tex.detail, /This scene's own images are about 160\.0 MB; the rest are textures kept from scenes/);
   assert.match(tex.fix, /reload to free it/);
+});
+
+test("items repeated on many tokens are named, with their flags, and token names show under their actor", () => {
+  const MB = 1024 * 1024;
+  const report = heavyWorldReport();
+  report.env.isGM = true;
+  report.payload = {
+    sections: [{ key: "scenes", bytes: 62 * MB, count: 89 }], packs: [],
+    detail: { scenes: { bytes: 62 * MB, tokenDelta: 50 * MB, parts: [{ key: "tokens", bytes: 55 * MB }], largest: [],
+      tokens: {
+        count: 751, linked: 102, unlinked: 649, deltaBytes: 50 * MB, items: 10345, withItems: 635,
+        parts: [{ key: "items", bytes: 47.7 * MB }], same: { items: 0, bytes: 0 },
+        added: { items: 10293, duplicates: 41, examples: [] }, linkedDelta: { tokens: 0, bytes: 0 }, missingActor: { tokens: 0, bytes: 0 },
+        largest: [],
+        byActor: [{ actor: "Mongrelfolk", tokens: 72, bytes: 4.3 * MB, items: 1080, same: 0,
+          names: [{ name: "Mongrelfolk", count: 4 }, { name: "Clovin Belview", count: 1 }], distinctNames: 30 }],
+        repeated: { items: 9000, bytes: 40 * MB, top: [
+          { name: "Shove", type: "feat", tokens: 640, bytes: 4 * MB, flags: ["chris-premades"] },
+          { name: "Dash", type: "feat", tokens: 640, bytes: 3 * MB, flags: ["chris-premades", "midi-qol"] }
+        ] }
+      } } }
+  };
+  const findings = recommend(report);
+  const f = findings.find(x => x.title.startsWith("Unlinked tokens store"));
+  assert.match(f.detail, /40\.0 MB of it is the same items repeated on many tokens: Shove \(640 tokens\), Dash \(640 tokens\)\. They carry flags from chris-premades, midi-qol/);
+  assert.match(f.fix, /one copy per actor instead of one per token/);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("Mongrelfolk ×4, Clovin Belview, and 28 more"));
+  assert.ok(html.includes("Items repeated on many tokens: 9000 copies, 40.0 MB"));
 });
 

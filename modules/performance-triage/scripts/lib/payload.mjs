@@ -47,6 +47,9 @@ class TokenStats {
     this.missingActor = { tokens: 0, bytes: 0 };
     this.largest = new TopN(10, t => t.bytes);
     this.byActor = new Map();
+    // Added items that look the same on many tokens: same type, name and serialized size (ids are always 16
+    // characters, so they don't change the size). Items a module adds to every placed token show up here.
+    this.repeated = new Map();
   }
 
   #base(actorId) {
@@ -92,6 +95,14 @@ class TokenStats {
             const baseJson = base.byId.get(item?._id);
             if ( baseJson === undefined ) {
               this.added.items++;
+              const key = `${item?.type}:${item?.name}:${json.length}`;
+              let r = this.repeated.get(key);
+              if ( !r ) {
+                this.repeated.set(key, r = { name: item?.name ?? "", type: item?.type ?? "", tokens: 0, bytes: 0,
+                  flags: Object.keys(item?.flags ?? {}).slice(0, 4) });
+              }
+              r.tokens++;
+              r.bytes += itemSize;
               if ( base.names.has(`${item?.type}:${item?.name}`) ) {
                 this.added.duplicates++;
                 doubled.push(item?.name ?? "");
@@ -133,8 +144,11 @@ class TokenStats {
     let g = this.byActor.get(actorKey);
     if ( !g ) {
       const name = this.actorsById.get(actorKey)?.name ?? null;
-      this.byActor.set(actorKey, g = { actor: name, tokens: 0, bytes: 0, items: 0, same: 0 });
+      this.byActor.set(actorKey, g = { actor: name, tokens: 0, bytes: 0, items: 0, same: 0, names: new Map() });
     }
+    // Tokens are often renamed (an adventure's named NPCs built on one generic actor), so keep what they're called
+    const tokenName = token?.name ?? "";
+    g.names.set(tokenName, (g.names.get(tokenName) ?? 0) + 1);
     g.tokens++;
     g.bytes += bytes;
     g.items += items;
@@ -156,7 +170,22 @@ class TokenStats {
       linkedDelta: this.linkedDelta,
       missingActor: this.missingActor,
       largest: this.largest.items,
-      byActor: [...this.byActor.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10)
+      byActor: [...this.byActor.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10).map(g => ({
+        ...g,
+        names: [...g.names.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([name, count]) => ({ name, count })),
+        distinctNames: g.names.size
+      })),
+      repeated: this.#repeatedSummary()
+    };
+  }
+
+  /** Added items found on at least `min` tokens, largest share first. */
+  #repeatedSummary(min = 5) {
+    const list = [...this.repeated.values()].filter(r => r.tokens >= min);
+    return {
+      items: list.reduce((a, r) => a + r.tokens, 0),
+      bytes: list.reduce((a, r) => a + r.bytes, 0),
+      top: list.sort((a, b) => b.bytes - a.bytes).slice(0, 15)
     };
   }
 }

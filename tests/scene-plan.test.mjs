@@ -167,3 +167,19 @@ test("archived areas list what is in compendiums and the ways into them from the
   assert.match(scenePlanToMarkdown(plan), /## Ways into archived areas\n\nBring the area back before players use one of these\.\n\n- Castle \(Barovia\) → Old Mill \(Archive: Mill\)/);
 });
 
+test("maps players have explored need prep, because archiving resets their fog", () => {
+  const input = world();
+  input.explored = new Map([[ID.castle, ["Alice", "Bob"]], [ID.crypt, ["Alice"]]]);
+  const plan = planScenes(input);
+  const by = rowsByName(plan);
+  assert.equal(by.Castle.status, "prep");
+  assert.match(sceneNote(by.Castle), /explored by Alice, Bob: their fog of war here resets if it is archived/);
+  const barovia = plan.areas.find(a => a.folder === "Barovia");
+  assert.deepEqual(barovia.explored, ["Castle"]);
+  assert.deepEqual(plan.areas.find(a => a.folder === "Dungeons").explored, [], "the crypt is in use, so it stays");
+  const html = scenePlanToHtml(plan);
+  assert.ok(html.includes("Explored by players, fog resets if archived: Castle."));
+  assert.ok(!html.includes("couldn&#39;t be read"));
+  assert.ok(scenePlanToHtml(planScenes(world())).includes("couldn&#39;t be read"), "unknown fog is said, not assumed");
+});
+

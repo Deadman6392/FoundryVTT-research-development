@@ -22,7 +22,8 @@ Object.assign(game, {
   ]),
   journal: collection([doc({ _id: "j1", name: "Lore", pages: [{ text: { content: "@UUID[Scene.scene00000000002]" } }] })]),
   macros: collection([]),
-  users: collection([{ id: "p1", active: true, viewedScene: "scene00000000003" }, { id: "p2", active: false, viewedScene: "scene00000000002" }]),
+  users: collection([{ id: "p1", name: "Alice", active: true, viewedScene: "scene00000000003" },
+    { id: "p2", name: "Bob", active: false, viewedScene: "scene00000000002" }, { id: "gm1", name: "GM", isGM: true, active: true }]),
   actors: collection([{ id: "a1", hasPlayerOwner: false }, { id: "a2", hasPlayerOwner: true }]),
   packs: collection([
     // The GM's archive: one scene still in the world (kept after a restore), one only in the compendium
@@ -38,16 +39,30 @@ Object.assign(game, {
   ])
 });
 
+// Fog of war is fetched from the server as an index of (scene, user) pairs
+let fogQuery = null;
+CONFIG.FogExploration = { documentClass: { database: { get: async (cls, operation) => {
+  fogQuery = operation;
+  return [
+    { _id: "f1", scene: "scene00000000002", user: "p1" },
+    { _id: "f2", scene: "scene00000000002", user: "gm1" },  // the GM's own fog doesn't count
+    { _id: "f3", scene: "scene00000000002", user: "p1" }
+  ];
+} } } };
+
 const { collectScenePlan } = await import("../modules/performance-triage/scripts/scene-plan.mjs");
 const { telemetry } = await import("../modules/performance-triage/scripts/telemetry.mjs");
 
-test("collects the plan from world collections", () => {
-  const plan = collectScenePlan();
+test("collects the plan from world collections", async () => {
+  const plan = await collectScenePlan();
   const by = Object.fromEntries(plan.rows.map(r => [r.name, r]));
   assert.equal(by.Village.status, "inUse", "the active scene");
   assert.equal(by.Crypt.status, "inUse", "a scene an online player is viewing");
   assert.equal(by.Crypt.playerTokens, 1);
-  assert.equal(by.Castle.status, "ready", "an offline player's view doesn't count, and a journal link needs no prep");
+  assert.equal(by.Castle.status, "prep", "an offline player's view doesn't count, but Alice explored it");
+  assert.deepEqual(by.Castle.exploredBy, ["Alice"]);
+  assert.deepEqual([fogQuery.index, fogQuery.indexFields], [true, ["scene", "user"]], "only an index is fetched");
+  assert.equal(plan.fogKnown, true);
   assert.equal(by.Castle.folder, "Barovia / Village", "nested folders show their path");
   assert.deepEqual(by.Castle.docLinks, [{ type: "journal", name: "Lore" }]);
   assert.deepEqual(plan.archive.map(a => [a.title, a.names]), [["Archive: Vallaki", ["Wachterhaus"]]],
@@ -56,10 +71,10 @@ test("collects the plan from world collections", () => {
   assert.equal(plan.hasPrepTimes, false);
 });
 
-test("uses token actor timings from this session when there are some", () => {
+test("uses token actor timings from this session when there are some", async () => {
   telemetry.prep = { count: 0, totalMs: 0, actors: [], tokens: { count: 1, totalMs: 40, rows: [], byScene: [{ id: "scene00000000002", name: "Castle", tokens: 1, ms: 40 }] } };
   try {
-    const by = Object.fromEntries(collectScenePlan().rows.map(r => [r.name, r]));
+    const by = Object.fromEntries((await collectScenePlan()).rows.map(r => [r.name, r]));
     assert.equal(by.Castle.prepMs, 40);
     assert.equal(by.Village.prepMs, null);
   } finally {
@@ -72,3 +87,16 @@ test("the planner window is GM only", async () => {
   game.user = { isGM: false };
   assert.equal(ScenePlanApp.open(), null);
 });
+
+test("without a way to read fog, the plan says so instead of guessing", async () => {
+  const saved = CONFIG.FogExploration;
+  CONFIG.FogExploration = { documentClass: { database: { get: async () => { throw new Error("denied"); } } } };
+  try {
+    const plan = await collectScenePlan();
+    assert.equal(plan.fogKnown, false);
+    assert.equal(plan.rows.find(r => r.name === "Castle").status, "ready");
+  } finally {
+    CONFIG.FogExploration = saved;
+  }
+});
+

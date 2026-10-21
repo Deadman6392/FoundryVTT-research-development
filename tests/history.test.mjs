@@ -19,10 +19,12 @@ test("an entry summarizes the load from marks and long frames", () => {
     worldBytes: 98.6 * 1024 * 1024,
     fps: 59.3,
     profile: "none",
+    user: "Deadman6392",
+    gm: true,
     now: 1000
   });
   assert.deepEqual({ ...entry, worldBytes: Math.round(entry.worldBytes) }, {
-    at: 1000, usable: 36016, wait: 10553 - 2747, build: 9238, readyHandlers: 11187,
+    at: 1000, user: "Deadman6392", gm: true, usable: 36016, wait: 10553 - 2747, build: 9238, readyHandlers: 11187,
     scenes: 89, tokens: 751, actors: 377, modules: 157, worldBytes: Math.round(98.6 * 1024 * 1024), fps: 59.3, profile: "none"
   });
 });
@@ -45,6 +47,7 @@ test("recordLoad writes one entry per call to local storage and the report shows
   Object.assign(telemetry.marks, { init: 100, setup: 600, ready: 900, readyComplete: 1000 });
   game.scenes = Object.assign([{ tokens: { size: 3 } }, { tokens: { size: 2 } }], { size: 2 });
   game.actors = { size: 7 };
+  game.user = { name: "Test Player", isGM: false };
   const { recordLoad, readHistory } = await import("../modules/performance-triage/scripts/history.mjs");
   recordLoad("low");
   recordLoad("low");
@@ -54,6 +57,10 @@ test("recordLoad writes one entry per call to local storage and the report shows
   assert.ok(env.localStorage.getItem("performance-triage:history").startsWith("["));
 
   const { reportToHtml } = await import("../modules/performance-triage/scripts/lib/report-format.mjs");
-  const html = reportToHtml({ env: {}, timeline: { marks: telemetry.marks }, history, findings: [] }, {});
-  assert.ok(html.includes("Load history on this computer: 2 loads, median time until usable 1.0 s"));
+  assert.equal(history[0].user, "Test Player");
+  const gmLoad = { ...history[0], user: "GM", gm: true, usable: 40000 };
+  const html = reportToHtml({ env: { user: "Test Player" }, timeline: { marks: telemetry.marks }, history: [gmLoad, ...history], findings: [] }, {});
+  assert.ok(html.includes("Load history in this browser: 3 loads; median time until usable for Test Player 1.0 s"),
+    "another login's load in the same browser doesn't skew this user's median");
+  assert.ok(html.includes("GM (GM)"));
 });

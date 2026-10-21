@@ -46,7 +46,7 @@ export class ScenePlanApp extends ApplicationV2 {
       ui.notifications.info(game.i18n.localize("PTRIAGE.ScenePlan.Measuring"));
       await nextFrame();
       const t0 = performance.now();
-      this.plan = collectScenePlan();
+      this.plan = await collectScenePlan();
       this.#measuredMs = performance.now() - t0;
     }
     return { plan: this.plan };
