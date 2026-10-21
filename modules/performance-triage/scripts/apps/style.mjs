@@ -27,10 +27,13 @@ const CSS = `
 .ptriage-table { width: 100%; border-collapse: collapse; margin: 0.4rem 0 0.6rem; font-size: 0.92em; }
 .ptriage-table caption { text-align: left; font-weight: bold; padding: 0.2rem 0; }
 .ptriage-table th, .ptriage-table td { padding: 0.15rem 0.35rem; text-align: left; vertical-align: top; border-bottom: 1px solid rgba(127,127,127,0.25); word-break: break-word; }
-.ptriage-table td:not(:first-child) { white-space: nowrap; }
+.ptriage-table td:not(:first-child), .ptriage-table th { white-space: nowrap; }
 .ptriage-profiles select { width: 100%; }
 .ptriage-profiles .ptriage-summary { font-size: 0.85em; opacity: 0.8; }
 .ptriage-profiles footer { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+.ptriage-plan .ptriage-summary { font-size: 0.85em; opacity: 0.8; }
+.ptriage-table td.ptriage-wrap { white-space: normal; min-width: 14em; }
+.ptriage-plan-small, .ptriage-plan-inUse { opacity: 0.65; }
 `;
 
 export function injectStyle() {

@@ -298,6 +298,9 @@ function collectPlayers() {
 /** Let the browser paint between batches. The callback is defined here so long-frame timing credits this module. */
 const yieldToBrowser = () => new Promise(resolve => setTimeout(() => resolve(), 0));
 
+/** Work this long between yields; token actors are slower than world actors, so a fixed count froze for ~0.8 s. */
+const BATCH_MS = 50;
+
 /** Time actor.reset() and describe the actor; slow or throwing actors are reported, never fatal. */
 function timeReset(actor) {
   const t0 = performance.now();
@@ -323,11 +326,17 @@ function timeReset(actor) {
 export async function benchmarkActors() {
   const rows = [];
   let total = 0;
+  let batchStart = performance.now();
+  const maybeYield = async () => {
+    if ( performance.now() - batchStart < BATCH_MS ) return;
+    await yieldToBrowser();
+    batchStart = performance.now();
+  };
   for ( const actor of game.actors ) {
     const r = timeReset(actor);
     total += r.ms;
     rows.push({ name: actor.name, type: actor.type, ms: Math.round(r.ms * 10) / 10, items: r.items, effects: r.effects });
-    if ( rows.length % 20 === 0 ) await yieldToBrowser();
+    await maybeYield();
   }
   rows.sort((a, b) => b.ms - a.ms);
 
@@ -341,7 +350,7 @@ export async function benchmarkActors() {
       const r = timeReset(actor);
       tokenTotal += r.ms;
       tokenRows.push({ name: token.name, scene: scene.name, ms: Math.round(r.ms * 10) / 10, items: r.items, effects: r.effects });
-      if ( tokenRows.length % 20 === 0 ) await yieldToBrowser();
+      await maybeYield();
     }
   }
   tokenRows.sort((a, b) => b.ms - a.ms);

@@ -27,12 +27,14 @@ function itemJson(item) {
  * Sizes every token's actor delta. An unlinked token stores its own copy of each item that differs from the
  * sidebar actor's, and anything that rewrites every item (a system migration, a bulk automation update) leaves a
  * full copy of the actor in every token. Items that still match the base actor exactly are counted separately:
- * they make the world bigger without making the token any different.
+ * they make the world bigger without making the token any different. Items whose id the base actor doesn't have
+ * are additions, which the token shows on top of the base actor's items; an addition with the same name and type as
+ * a base item usually means the token shows that item twice.
  */
 class TokenStats {
   constructor(actorsById) {
     this.actorsById = actorsById;
-    this.baseItems = new Map(); // actorId -> Map(itemId -> JSON), built only for actors that have delta items
+    this.baseItems = new Map(); // actorId -> {byId: Map(itemId -> JSON), names: Set}, only for actors with delta items
     this.count = 0;
     this.linked = 0;
     this.deltaBytes = 0;
@@ -40,6 +42,7 @@ class TokenStats {
     this.items = 0;
     this.withItems = 0;
     this.same = { items: 0, bytes: 0 };
+    this.added = { items: 0, duplicates: 0 };
     this.linkedDelta = { tokens: 0, bytes: 0 };
     this.missingActor = { tokens: 0, bytes: 0 };
     this.largest = new TopN(10, t => t.bytes);
@@ -47,12 +50,15 @@ class TokenStats {
   }
 
   #base(actorId) {
-    let map = this.baseItems.get(actorId);
-    if ( map ) return map;
-    map = new Map();
-    for ( const item of this.actorsById.get(actorId)?.items ?? [] ) map.set(item?._id, itemJson(item));
-    this.baseItems.set(actorId, map);
-    return map;
+    let base = this.baseItems.get(actorId);
+    if ( base ) return base;
+    base = { byId: new Map(), names: new Set() };
+    for ( const item of this.actorsById.get(actorId)?.items ?? [] ) {
+      base.byId.set(item?._id, itemJson(item));
+      base.names.add(`${item?.type}:${item?.name}`);
+    }
+    this.baseItems.set(actorId, base);
+    return base;
   }
 
   /** @returns {number} Serialized size of the token */
@@ -74,14 +80,19 @@ class TokenStats {
         let size;
         if ( (dk === "items") && Array.isArray(dv) ) {
           size = dk.length + 5;
-          const base = (!linked && dv.length) ? this.#base(token.actorId) : null;
+          const base = (!linked && dv.length && this.actorsById.has(token.actorId)) ? this.#base(token.actorId) : null;
           for ( const item of dv ) {
             const json = itemJson(item);
             const itemSize = json.length + safeSize(item?._stats) + 10;
             size += itemSize;
             if ( item?._tombstone ) continue;
             items++;
-            if ( base && json && (base.get(item?._id) === json) ) {
+            if ( !base ) continue;
+            const baseJson = base.byId.get(item?._id);
+            if ( baseJson === undefined ) {
+              this.added.items++;
+              if ( base.names.has(`${item?.type}:${item?.name}`) ) this.added.duplicates++;
+            } else if ( json && (baseJson === json) ) {
               same++;
               this.same.bytes += itemSize;
             }
@@ -133,6 +144,7 @@ class TokenStats {
       items: this.items,
       withItems: this.withItems,
       same: this.same,
+      added: this.added,
       linkedDelta: this.linkedDelta,
       missingActor: this.missingActor,
       largest: this.largest.items,

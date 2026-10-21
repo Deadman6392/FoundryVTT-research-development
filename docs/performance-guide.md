@@ -66,18 +66,22 @@ which does depend on the CPU: about 10 seconds on the desktop and 23 on the work
 world shortens both, for everyone, and it's the part a GM can work on between sessions.
 
 Turn on the hook profiler for one load to get the *World data sent to every client* section. In that world, scenes
-were three quarters of it, and most of that was unlinked tokens' own copies of their items. An unlinked token
-normally stores only what differs from its sidebar actor, but anything that rewrites every item on a token (a system
-migration, a module's bulk update) leaves a full copy of the actor's items in that token, on every scene. The report
-counts those copies, groups them by sidebar actor, and says how many are identical to the sidebar actor's items
-apart from timestamps.
+were three quarters of it, and most of that was unlinked tokens' own copies of their items: 946 of 964 unlinked
+tokens carried 16,471 item copies, 89 MB. An unlinked token normally stores only what differs from its sidebar actor,
+so a full set of copies means each token carries its own version of every item. The report counts those copies,
+groups them by sidebar actor, and says how many differ from the sidebar actor's items, how many are extra items, and
+how many are identical apart from timestamps (in that world, only 2 were).
 
 What helps, roughly in order of effort:
 
-- **Export scenes nobody is near.** Drag them into a world compendium (or export a whole scene folder from its context
-  menu), then delete them from the Scenes tab. A compendium is not sent at startup beyond its index, and the scene
-  comes back intact, tokens included, when you import it. Links that point at it (journal links, teleport regions)
-  need re-pointing afterwards.
+- **Archive scenes nobody is near.** *Plan scene archiving* (GM only) ranks every scene, totals them by folder, and
+  lists what to prepare first: map notes that open journal entries, and journal entries, macros or other scenes that
+  link to the scene. Then right-click a scene folder, *Export to Compendium*, tick the option to keep IDs, and delete
+  those scenes from the Scenes tab. A compendium is not sent at startup beyond its index. To bring an area back, use
+  that compendium's *Import All* with its keep-ID option ticked; with the same IDs, journal links, teleport regions,
+  tile triggers and map notes work again. Dragging a single scene out of a compendium can give it a new ID, so one
+  compendium per area is easier than one big archive. Try the round trip on one scene first, and check that explored
+  fog survives it.
 - **Replace unused tokens that carry copies.** Deleting a token and placing a fresh one from the sidebar actor drops
   its copies. It also resets that token's HP, name and conditions, so do it for tokens the party hasn't met yet.
 - **Move NPCs you aren't using into a compendium.** Every world actor is sent to and prepared by every client.
