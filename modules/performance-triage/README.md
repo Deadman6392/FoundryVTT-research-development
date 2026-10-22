@@ -56,6 +56,21 @@ compendiums aren't counted, and links from other modules' data (an item pile, a 
 the server, the world build, ready handlers, scene and token counts and the frame rate, so the effect of a change
 (archiving an area, disabling a module) shows up as numbers.
 
+**Frame rate during play** (GM setting *Measure frame rate during play*, off by default): every computer counts
+the frames it draws in five-second stretches while its window has focus and isn't idle-throttled, per scene, and
+notes the long frames (over 50 ms) in the two seconds after each token move on the scene it is viewing, with the
+script time in them by module. The report shows this session and the previous one; players who share a summary
+send their previous session's numbers with the summary they already send once per session, so *Client profiles*
+shows each player's slowest scene, and a slow scene counts toward the suggested profile. Frames under 50 ms aren't
+attributed to modules (the browser only reports longer ones), so the move numbers are the stutter players notice,
+not all the work a move causes.
+
+**Render scale** (client setting, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's pixels and
+lets the browser stretch it. Everything is still drawn (lights, weather, filters, animations), just less sharply,
+so it is the setting to try when a computer's graphics card is the bottleneck. It doesn't help stutters from
+automation, which are CPU work. It is applied through Foundry's `canvasConfig` hook before the canvas is created, so
+it needs a reload. Not yet included in any profile.
+
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
 one costs on this computer. It takes about 30 seconds, only changes what this client draws while it runs, and puts
@@ -112,7 +127,12 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   in its own tables. It also measures the world data once, right after init, from a file that is only fetched while
   the profiler is on. That takes a fraction of a second for a 140 MB world on a desktop (about 0.55 s in Node for a
   synthetic 124 MB world) and the report shows how long it took on your computer.
-- Summary sharing: one update to your own User document per session, about a minute after loading.
+- Summary sharing: one update to your own User document per session, about a minute after loading. With frame rate
+  tracking on, it also carries the previous session's per-scene numbers (up to eight scenes, under 1 KB).
+- Frame rate during play, while the GM has it on: one increment per rendered frame, a check every 5 seconds, a
+  `moveToken` listener, two short timers per token move, and the long frames the browser already reports. A
+  summary is written to this browser's localStorage when the page is hidden or closed.
+- Render scale: one `canvasConfig` listener, which runs once when the canvas is created.
 - Scene planner, while its *Actors and tokens* tab has been opened and the window is open: a `createToken` and a
   `deleteToken` listener that recount once a burst of changes settles. A count took 20 to 75 ms for 377 actors
   (23 MB) and about 30 ms for 300 tokens carrying 22 MB of item copies, measured in headless Chromium.

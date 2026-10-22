@@ -106,7 +106,11 @@ export function recommend(report) {
     layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
     lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
     scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" },
-    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" }
+    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" },
+    trackPlay: report.env?.isGM && report.play && !report.play.tracking
+      && { id: "enableTrackPlay", label: "Measure frame rate during play" },
+    // Unlike layerCosts, offered again after a measurement: it belongs to the scene it was taken on
+    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -482,6 +486,8 @@ export function recommend(report) {
       "The Low profile turns resolution scaling off.");
   }
 
+  playFindings(report, add, can);
+
   // Players (GM view)
   for ( const p of report.players ?? [] ) {
     const suggestion = suggestProfile(p.summary);
@@ -493,6 +499,67 @@ export function recommend(report) {
   }
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+/** The frame cap a scene's numbers are judged against; above 60 fps, drops don't matter for a tabletop. */
+const fpsCap = s => Math.min(s.target || 60, 60);
+
+/** Scenes where the median frame rate stayed well under the cap, with at least a minute measured. */
+export function slowScenes(scenes) {
+  return (scenes ?? []).filter(s => (s.minutes >= 1) && Number.isFinite(s.fps) && (s.fps < 0.6 * fpsCap(s)));
+}
+
+const sceneText = s => `${s.name}: about ${Math.round(s.fps)} fps (cap ${fpsCap(s)}), lowest tenth about `
+  + `${Math.round(s.low)} fps, ${s.longPerMin} stutters a minute over ${s.minutes} min`;
+
+/** What to try when one package dominates the work after token moves, by package key. */
+const MOVE_ADVICE = {
+  core: "Foundry's own work after a move is mostly recomputing vision and lighting, which grows with the walls and "
+    + "lights near the token and the number of tokens with vision. Fewer vision-giving tokens on the GM's side "
+    + "(hide or delete ones not in play) and fewer light sources help."
+};
+
+/** Frame rate during play: slow scenes, the cost of token moves, and how to start measuring. */
+function playFindings(report, add, can) {
+  const play = report.play;
+  if ( !play ) return;
+  const current = play.current?.scenes?.length ? play.current : null;
+  const data = current ?? (play.previous?.scenes?.length ? play.previous : null);
+  const when = current ? "this session" : "the previous session in this browser";
+  if ( !data ) {
+    if ( can.trackPlay ) {
+      add("info", "Play", "Frame rate during play isn't measured yet",
+        "Load times don't show which scenes drop frames once lights, weather, auras and automation are in play. With "
+        + "this on, every computer counts its frame rate per scene and the work after each token move, and players "
+        + "who share a summary send their previous session's numbers to you at their next load.",
+        "Turn it on, play a session, then open this report (and Client profiles for players).", [can.trackPlay]);
+    }
+    return;
+  }
+  const slow = slowScenes(data.scenes);
+  if ( slow.length ) {
+    const worst = Math.min(...slow.map(s => s.fps / fpsCap(s)));
+    add((worst < 0.4) ? "high" : "medium", "Play", `Frame rate dropped on ${plural(slow.length, "scene")} during ${when}`,
+      slow.map(sceneText).join("; ") + ". The lowest tenth is the frame rate this computer fell to in its worst "
+      + "tenth of five-second stretches.",
+      "Open that scene and run Measure layer costs to see which part of the drawing costs the most here. A lower "
+      + "render scale, or the Low profile, makes everything cheaper to draw on this computer without removing it.",
+      [can.measureLayers]);
+  }
+  const mv = data.moves;
+  if ( mv && (mv.count >= 3) && ((mv.medianMs >= 100) || (mv.worstMs >= 500)) ) {
+    const total = mv.packages.reduce((a, p) => a + p.ms, 0) || 1;
+    const by = mv.packages.slice(0, 4).map(p => `${name(p.key)} ${Math.round((100 * p.ms) / total)}%`).join(", ");
+    const top = mv.packages[0]?.key;
+    add((mv.medianMs >= 250) ? "high" : "medium", "Play", `Token moves stall this computer for about ${ms(mv.medianMs)} each`,
+      `Over ${plural(mv.count, "move")} during ${when}, frames longer than 50 ms in the two seconds after each move `
+      + `added up to a median of ${ms(mv.medianMs)} (worst ${ms(mv.worstMs)}); ${mv.stuttered} moves caused one. `
+      + `The canvas drew about ${mv.fps} fps while tokens moved. Script time in those frames by package: ${by}. `
+      + "Shorter frames aren't counted, so this is the stutter players notice, not all the work.",
+      (MOVE_ADVICE[top] ?? "Check that package's settings for work it does on "
+        + "every move (auras, templates, region or movement triggers) that it can limit, for example to combat.")
+      + " Run the CPU profile while moving tokens to see the functions involved.");
+  }
 }
 
 const LAYER_ADVICE = {
@@ -512,6 +579,17 @@ const LAYER_ADVICE = {
 
 function layerAdvice(id) {
   return LAYER_ADVICE[id] ?? "";
+}
+
+/** One line about a client's previous session, from the play summary it shared, or "" without one. */
+export function describePlay(play) {
+  if ( !play?.scenes?.length ) return "";
+  const scenes = play.scenes.filter(x => (x.minutes >= 1) && Number.isFinite(x.fps));
+  const slowest = scenes.sort((a, b) => (a.fps / fpsCap(a)) - (b.fps / fpsCap(b)))[0];
+  const parts = [];
+  if ( slowest ) parts.push(`slowest scene ${slowest.name}, about ${Math.round(slowest.fps)} of ${fpsCap(slowest)} fps`);
+  if ( play.moves?.count >= 3 ) parts.push(`token moves stall about ${ms(play.moves.medianMs)}`);
+  return parts.length ? `Previous session: ${parts.join("; ")}.` : "";
 }
 
 export function describeSummary(s) {

@@ -5,6 +5,7 @@
 import { MODULE_ID } from "./constants.mjs";
 import { telemetry, rendererInfo, countFps, timelineSnapshot } from "./telemetry.mjs";
 import { readHistory } from "./history.mjs";
+import { previousPlay } from "./play-tracker.mjs";
 import { recommend } from "./lib/recommend.mjs";
 import { PROFILES, valuesEqual, splitSettingKey } from "./lib/profiles.mjs";
 
@@ -46,7 +47,7 @@ export async function collectReport() {
       chatBatchSize: CONFIG.ChatMessage?.batchSize ?? null,
       overridden: safe(() => profileDrift(api.profileId), [])
     },
-    client: { ...safe(collectClient, {}), liveFps },
+    client: { ...safe(collectClient, {}), liveFps, renderScale: api.renderScale ?? 1 },
     timeline: safe(collectTimeline, {}),
     network: {
       load: telemetry.resources.load?.toJSON(),
@@ -68,7 +69,12 @@ export async function collectReport() {
     sampler: telemetry.sampler,
     prep: telemetry.prep,
     frameCost: telemetry.frameCost,
-    history: safe(readHistory, [])
+    history: safe(readHistory, []),
+    play: {
+      tracking: !!setting(MODULE_ID, "trackPlay"),
+      current: safe(() => telemetry.play?.summary() ?? null),
+      previous: safe(previousPlay)
+    }
   };
   report.findings = recommend(report);
   return report;

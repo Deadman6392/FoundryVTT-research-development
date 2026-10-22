@@ -3,7 +3,7 @@
  */
 import { MODULE_ID } from "../constants.mjs";
 import { PROFILES, PROFILE_IDS, suggestProfile } from "../lib/profiles.mjs";
-import { describeSummary } from "../lib/recommend.mjs";
+import { describeSummary, describePlay } from "../lib/recommend.mjs";
 import { esc } from "../lib/report-format.mjs";
 import { injectStyle } from "./style.mjs";
 
@@ -51,7 +51,8 @@ export class ProfilesApp extends ApplicationV2 {
       const running = summary?.profile ? t(`PTRIAGE.Profile.${summary.profile}.Name`) : "–";
       return `<tr>
         <td><strong>${esc(u.name)}</strong>${u.isGM ? " (GM)" : ""}${u.active ? ` <i class="fa-solid fa-circle" style="color:#3a3;font-size:0.6em" title="online"></i>` : ""}
-          <div class="ptriage-summary">${esc(describeSummary(summary))}</div></td>
+          <div class="ptriage-summary">${esc(describeSummary(summary))}</div>
+          ${summary?.play ? `<div class="ptriage-summary">${esc(describePlay(summary.play))}</div>` : ""}</td>
         <td>${running}</td>
         <td>${suggestion ? t(`PTRIAGE.Profile.${suggestion}.Name`) : "–"}</td>
         <td><select name="assign.${esc(u.id)}">${options(assignments[u.id] ?? "default", true)}</select></td>

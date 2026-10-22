@@ -141,7 +141,10 @@ export function valuesEqual(a, b) {
 export function suggestProfile(summary) {
   if ( !summary ) return null;
   const fps = summary.fps;
-  const lowFps = fps && fps.target && (fps.achieved < Math.min(fps.target, 60) * 0.5);
+  // A scene where the previous session's median stayed under half the cap counts as much as a slow first minute
+  const slowScene = (summary.play?.scenes ?? [])
+    .some(s => (s.minutes >= 2) && Number.isFinite(s.fps) && (s.fps < Math.min(s.target || 60, 60) * 0.5));
+  const lowFps = (fps && fps.target && (fps.achieved < Math.min(fps.target, 60) * 0.5)) || slowScene;
   const slowLoad = summary.loadSeconds > 90;
   const weakHardware = ((summary.memory ?? 8) <= 4) || ((summary.cores ?? 8) <= 2) || ((summary.maxTexture ?? 16384) <= 4096);
   if ( lowFps && weakHardware ) return "minimum";

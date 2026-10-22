@@ -386,3 +386,58 @@ test("this module's own long frames alone raise no finding", () => {
   report.longFrames.play.packages = [{ key: "module:performance-triage", count: 48, duration: 2834, layout: 28 }];
   assert.ok(!recommend(report).some(f => f.title === "Modules that started long frames during play"));
 });
+
+test("frame rate during play: slow scenes, token move stalls by package, and players' previous sessions", () => {
+  const report = sampleReport();
+  report.env.isGM = true;
+  report.canvas.ready = true;
+  report.play = {
+    tracking: true,
+    current: {
+      scenes: [
+        { name: "Castle Ravenloft", minutes: 12, target: 60, fps: 22.5, low: 12.5, longPerMin: 4.2, moves: 30, moveMs: 260 },
+        { name: "Village", minutes: 20, target: 60, fps: 57.5, low: 47.5, longPerMin: 0.2, moves: 5, moveMs: 0 },
+        { name: "Glimpse", minutes: 0.5, target: 60, fps: 7.5, low: 2.5, longPerMin: 9, moves: 0, moveMs: null }
+      ],
+      moves: { count: 35, medianMs: 260, worstMs: 1400, stuttered: 30, fps: 31, totalMs: 9000,
+        packages: [{ key: "module:chris-premades", ms: 5000 }, { key: "core", ms: 3000 }, { key: "module:ActiveAuras", ms: 1000 }] }
+    },
+    previous: null
+  };
+  report.players = [{ id: "u1", name: "Sam", isGM: false, active: false, assigned: "default", profile: "none",
+    summary: { cores: 8, memory: 16, play: { scenes: [{ name: "Castle Ravenloft", minutes: 30, target: 60, fps: 17.5, low: 7.5 }] } } }];
+  const findings = recommend(report);
+  const slow = findings.find(f => f.title === "Frame rate dropped on 1 scene during this session");
+  assert.ok(slow, findings.map(f => f.title).join("\n"));
+  assert.equal(slow.severity, "high", "under 40% of the cap");
+  assert.match(slow.detail, /^Castle Ravenloft: about 23 fps \(cap 60\), lowest tenth about 13 fps, 4\.2 stutters a minute over 12 min/);
+  assert.ok(!slow.detail.includes("Glimpse"), "half a minute is too little to judge");
+  assert.deepEqual(slow.actions.map(a => a.id), ["measureFrameCost"], "offered even after an earlier measurement");
+  const moves = findings.find(f => f.title === "Token moves stall this computer for about 260 ms each");
+  assert.equal(moves.severity, "high");
+  assert.match(moves.detail, /chris-premades 56%, core 33%, ActiveAuras 11%/);
+  assert.match(moves.detail, /about 31 fps while tokens moved/);
+  assert.ok(findings.some(f => f.title === "Sam may need the low profile"), "a slow scene last session counts as low fps");
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("Frame rate by scene, this session"));
+  assert.ok(html.includes("Castle Ravenloft: about 18 of 60 fps"), "the players table names the slowest scene");
+});
+
+test("without play data the GM is offered tracking, and players aren't", () => {
+  const report = sampleReport();
+  report.play = { tracking: false, current: null, previous: null };
+  report.env.isGM = true;
+  const offer = recommend(report).find(f => f.title === "Frame rate during play isn't measured yet");
+  assert.deepEqual(offer.actions.map(a => a.id), ["enableTrackPlay"]);
+  report.env.isGM = false;
+  assert.ok(!recommend(report).some(f => f.title === "Frame rate during play isn't measured yet"));
+});
+
+test("a player's previous session reads as one line for Client profiles", async () => {
+  const { describePlay } = await import("../modules/performance-triage/scripts/lib/recommend.mjs");
+  assert.equal(describePlay(null), "");
+  assert.equal(describePlay({ scenes: [{ name: "Village", minutes: 20, target: 30, fps: 27.5 },
+    { name: "Castle", minutes: 5, target: 30, fps: 12.5 }, { name: "Brief", minutes: 0.2, target: 30, fps: 2.5 }],
+  moves: { count: 12, medianMs: 180 } }),
+  "Previous session: slowest scene Castle, about 13 of 30 fps; token moves stall about 180 ms.");
+});

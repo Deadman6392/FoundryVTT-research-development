@@ -5,7 +5,7 @@
  * the idle throttle. Everything with UI (the report, the profile manager, the CPU sampler) is loaded with a dynamic
  * import only when someone opens it, so it costs nothing for players who never look.
  */
-import { MODULE_ID } from "./constants.mjs";
+import { MODULE_ID, STORAGE_KEYS } from "./constants.mjs";
 import { bootstrap, telemetry, sampleFps, rendererInfo } from "./telemetry.mjs";
 import { PROFILES, PROFILE_IDS, resolveProfileId } from "./lib/profiles.mjs";
 import { applyProfile } from "./profile-apply.mjs";
@@ -24,7 +24,8 @@ const HISTORY_DELAY_MS = 65_000;
 const state = {
   profileId: "none",
   setup: null,
-  idle: null
+  idle: null,
+  renderScale: 1
 };
 
 /* -------------------------------------------- */
@@ -137,6 +138,26 @@ function registerSettings() {
     type: Boolean,
     default: true
   });
+  game.settings.register(MODULE_ID, "renderScale", {
+    name: "PTRIAGE.Settings.RenderScale.Name",
+    hint: "PTRIAGE.Settings.RenderScale.Hint",
+    scope: "client",
+    config: true,
+    type: Number,
+    choices: { 1: "100%", 0.85: "85%", 0.75: "75%", 0.6: "60%", 0.5: "50%" },
+    default: 1,
+    // Only read when the canvas is created, once per page load
+    requiresReload: true
+  });
+  game.settings.register(MODULE_ID, "trackPlay", {
+    name: "PTRIAGE.Settings.TrackPlay.Name",
+    hint: "PTRIAGE.Settings.TrackPlay.Hint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange: value => togglePlayTracking(value)
+  });
   game.settings.register(MODULE_ID, "assignments", {
     scope: "world",
     config: false,
@@ -174,6 +195,44 @@ function registerSettings() {
 }
 
 /* -------------------------------------------- */
+/*  Render scale                                */
+/* -------------------------------------------- */
+
+/**
+ * Draw the canvas at fewer pixels than the screen has, and let the browser stretch it. Everything on the map is
+ * still drawn (lights, weather, filters, animations), so it trades sharpness for GPU time: 75% draws a little over
+ * half the pixels. canvasConfig (v13 and v14) passes the PIXI.Application options before the application exists,
+ * so nothing has to be resized afterwards.
+ */
+function applyRenderScale(config) {
+  const scale = Number(game.settings.get(MODULE_ID, "renderScale")) || 1;
+  if ( (scale >= 1) || (scale <= 0) ) return;
+  config.resolution = (config.resolution || 1) * scale;
+  state.renderScale = scale;
+}
+
+/* -------------------------------------------- */
+/*  Frame rate during play                      */
+/* -------------------------------------------- */
+
+/** Start or stop the play tracker; its code is only fetched while it is on. */
+async function togglePlayTracking(on) {
+  try {
+    const tracker = await import("./play-tracker.mjs");
+    if ( on ) tracker.startPlayTracker({ isThrottled: () => !!state.idle?.throttled });
+    else tracker.stopPlayTracker();
+  } catch(err) {
+    console.warn(`${MODULE_ID} | Could not ${on ? "start" : "stop"} frame rate tracking`, err);
+  }
+}
+
+/** The play summary an earlier load in this browser saved, if any. */
+async function previousPlay() {
+  if ( !globalThis.localStorage?.getItem(STORAGE_KEYS.play) ) return null;
+  return (await import("./play-tracker.mjs")).previousPlay();
+}
+
+/* -------------------------------------------- */
 /*  Client summary shared with the GM           */
 /* -------------------------------------------- */
 
@@ -193,6 +252,9 @@ async function shareSummary() {
     screen: `${screen.width}x${screen.height}`,
     ...rendererInfo()
   };
+  // Frame rate by scene from this browser's previous session, when the GM had tracking on then
+  const play = await previousPlay().catch(() => null);
+  if ( play ) summary.play = { at: play.at, scenes: play.scenes, moves: play.moves };
   try {
     await game.user.update({ [`flags.${MODULE_ID}.summary`]: summary }, { render: false });
   } catch(err) {
@@ -206,6 +268,7 @@ async function shareSummary() {
 
 Hooks.once("init", () => {
   registerSettings();
+  Hooks.once("canvasConfig", applyRenderScale);
   state.profileId = effectiveProfileId();
   const profile = PROFILES[state.profileId];
 
@@ -220,6 +283,7 @@ Hooks.once("init", () => {
     openScenePlan,
     telemetry,
     get profileId() { return state.profileId; },
+    get renderScale() { return state.renderScale; },
     get idle() { return state.idle?.status() ?? null; },
     suspendIdle: suspended => state.idle?.suspend(suspended),
     collectReport: async () => (await import("./audit.mjs")).collectReport(),
@@ -261,6 +325,8 @@ Hooks.once("ready", async () => {
   if ( profile.idle && globalThis.canvas?.app ) state.idle = new IdleThrottle(profile.idle).start();
 
   if ( telemetry.hookProfiler?.installed ) ui.notifications.warn(game.i18n.localize("PTRIAGE.Notify.ProfilerActive"));
+
+  if ( game.settings.get(MODULE_ID, "trackPlay") ) togglePlayTracking(true);
 
   if ( game.settings.get(MODULE_ID, "shareSummary") ) shareSummary();
 

@@ -215,6 +215,7 @@ function sections(report, opts = {}) {
   const gpuRows = [
     ["GPU", env.gpu ?? "–"], ["WebGL 2", env.webgl2 ? "yes" : "no"], ["Max texture size", env.maxTexture ?? "–"],
     ["Device pixel ratio", env.dpr], ["Renderer resolution", cl.rendererResolution ?? "–"],
+    ["Render scale", `${Math.round((cl.renderScale ?? 1) * 100)}%`],
     ["Performance mode", perf ? ["Low", "Medium", "High", "Maximum"][perf.mode] ?? perf.mode : "–"],
     ["Frame cap", perf ? (perf.fps || "uncapped") : "–"],
     ["Measured frame rate", cl.fps ? `${cl.fps.achieved} fps over the first minute (target ${cl.fps.target})`
@@ -306,6 +307,23 @@ function sections(report, opts = {}) {
     out.push({ id: "modules", title: `Modules (${m.active} active)`, tables: t });
   }
 
+  // Frame rate during play
+  const play = report.play;
+  if ( play ) {
+    const t = [...playTables(play.current, "this session"), ...playTables(play.previous, "the previous session")];
+    out.push({
+      id: "play",
+      title: "Frame rate during play",
+      intro: play.tracking
+        ? "Measured on every computer while the GM has it on: the frame rate in five-second stretches while this "
+          + "window had focus (not while idle-throttled), long frames, and the work in the two seconds after each "
+          + "token move on the scene being viewed."
+        : "Not being measured. The GM can turn on Measure frame rate during play in this module's settings.",
+      tables: t,
+      actions: (report.env?.isGM && !play.tracking) ? [["enableTrackPlay", "Measure frame rate during play"]] : []
+    });
+  }
+
   // Players
   if ( report.players?.length ) {
     out.push({
@@ -313,14 +331,45 @@ function sections(report, opts = {}) {
       title: "Players",
       intro: "What each client shared about itself on its last load. Assign profiles in Client Profiles.",
       tables: [{
-        head: ["User", "Online", "Assigned", "Running", "Last report", "Suggested"],
+        head: ["User", "Online", "Assigned", "Running", "Last report", "Slowest scene last session", "Suggested"],
         rows: report.players.map(p => [p.name + (p.isGM ? " (GM)" : ""), p.active ? "yes" : "no", p.assigned, p.profile,
-          describeSummary(p.summary), suggestProfile(p.summary) ?? "–"])
+          describeSummary(p.summary), slowestScene(p.summary?.play), suggestProfile(p.summary) ?? "–"])
       }],
       actions: [["openProfiles", "Client profiles"]]
     });
   }
   return out;
+}
+
+/** "Castle: about 22 of 60 fps" for the slowest scene with a minute or more measured. */
+export function slowestScene(play) {
+  const s = (play?.scenes ?? []).filter(x => (x.minutes >= 1) && Number.isFinite(x.fps))
+    .sort((a, b) => (a.fps / (a.target || 60)) - (b.fps / (b.target || 60)))[0];
+  return s ? `${s.name}: about ${Math.round(s.fps)} of ${s.target || 60} fps` : "–";
+}
+
+function playTables(data, label) {
+  if ( !data?.scenes?.length && !data?.moves ) return [];
+  const t = [];
+  if ( data.scenes?.length ) {
+    t.push({
+      caption: `Frame rate by scene, ${label}${data.at ? ` (${new Date(data.at).toLocaleString()})` : ""}`,
+      head: ["Scene", "Minutes", "Cap", "Median", "Lowest tenth", "Long frames a minute", "Token moves", "Median move stall"],
+      rows: data.scenes.map(x => [x.name, x.minutes, x.target || "none", Number.isFinite(x.fps) ? `${Math.round(x.fps)} fps` : "–",
+        Number.isFinite(x.low) ? `${Math.round(x.low)} fps` : "–", x.longPerMin, x.moves,
+        Number.isFinite(x.moveMs) ? fmtMs(x.moveMs) : "–"])
+    });
+  }
+  const mv = data.moves;
+  if ( mv?.packages?.length ) {
+    t.push({
+      caption: `Script time in long frames after token moves, ${label}: ${mv.count} moves, median stall `
+        + `${fmtMs(mv.medianMs)}, worst ${fmtMs(mv.worstMs)}, about ${mv.fps} fps while tokens moved`,
+      head: ["Package", "Script time", "Share"],
+      rows: mv.packages.map(p => [pkg(p.key), fmtMs(p.ms), pct(p.ms, mv.packages.reduce((a, x) => a + x.ms, 0))])
+    });
+  }
+  return t;
 }
 
 /** Earlier loads on this computer, newest first, recorded a minute after each load. */
