@@ -1,9 +1,10 @@
 /**
- * Gathers what the scene archive planner needs from the world. GM-only and on demand: it reads every scene's source
- * data (about a second on a 100 MB world) and changes nothing.
+ * Gathers what the scene planner needs from the world. GM-only and on demand: it reads every scene's source data
+ * (about a second on a 100 MB world for the archive plan, less for the token count) and changes nothing.
  */
 import { telemetry } from "./telemetry.mjs";
 import { planScenes } from "./lib/scene-plan.mjs";
+import { censusTokens } from "./lib/token-census.mjs";
 
 /** Scene folder id -> "Parent / Child" path, so nested folders with the same name can be told apart. */
 function folderPaths() {
@@ -60,11 +61,17 @@ async function exploredScenes() {
   }
 }
 
-export async function collectScenePlan() {
-  // Never suggest archiving a scene someone is on
+/** The active scene and any scene a connected user is viewing. */
+function scenesInUse() {
   const inUse = new Set();
   for ( const scene of game.scenes ) if ( scene.active ) inUse.add(scene.id);
   for ( const user of game.users ) if ( user.active && user.viewedScene ) inUse.add(user.viewedScene);
+  return inUse;
+}
+
+export async function collectScenePlan() {
+  // Never suggest archiving a scene someone is on
+  const inUse = scenesInUse();
   const playerActors = new Set();
   for ( const actor of game.actors ) if ( actor.hasPlayerOwner ) playerActors.add(actor.id);
   const byScene = telemetry.prep?.tokens?.byScene;
@@ -79,5 +86,17 @@ export async function collectScenePlan() {
     prepMs: byScene ? new Map(byScene.map(s => [s.id, s.ms])) : null,
     archived: archivedScenes(),
     explored: await exploredScenes()
+  });
+}
+
+/** Tokens on every world scene, grouped by the sidebar actor they were placed from. */
+export function collectTokenCensus() {
+  const actors = new Map();
+  for ( const a of game.actors ) actors.set(a.id, { name: a.name, type: a.type, player: a.hasPlayerOwner });
+  return censusTokens({
+    scenes: game.scenes.map(s => s._source),
+    actors,
+    folders: folderPaths(),
+    inUse: scenesInUse()
   });
 }

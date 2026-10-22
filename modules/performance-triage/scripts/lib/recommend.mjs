@@ -105,7 +105,8 @@ export function recommend(report) {
     actorTiming: !report.prep && report.world && { id: "benchmarkActors", label: "Time actor preparation" },
     layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
     lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
-    scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" }
+    scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" },
+    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Tokens by actor" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -222,7 +223,7 @@ export function recommend(report) {
         + "An unlinked token normally stores only what differs from its sidebar actor, so a full set of copies means "
         + `each token carries its own version of every item.${repeatedNote} By the sidebar actor the tokens are based `
         + `on: ${byActor}.`,
-        fix, [can.scenePlan]);
+        fix, [can.scenePlan, can.tokenCensus]);
     }
     if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {
       add("low", "World", `${plural(tk.linkedDelta.tokens, "linked token")} still store ${mb(tk.linkedDelta.bytes)} of actor data`,

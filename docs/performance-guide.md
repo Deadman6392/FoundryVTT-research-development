@@ -75,7 +75,7 @@ don't have: those tokens are the only place the items exist.
 
 What helps, roughly in order of effort:
 
-- **Archive areas nobody is near.** *Plan scene archiving* (GM only) groups scenes by folder and ranks the folders
+- **Archive areas nobody is near.** The scene planner's *Archive plan* (GM only) groups scenes by folder and ranks the folders
   by how much archiving them saves. It marks scenes that need prep first: journal entries on the map (keep them
   reachable from the Journal tab), and ways in from other areas, such as a teleport region in a scene that stays (if
   players head through one, bring the area back first). Then create a Scene compendium for the area, right-click the
@@ -97,6 +97,11 @@ What helps, roughly in order of effort:
 - **Don't replace tokens to save space unless you've checked.** A token placed fresh from the sidebar actor carries
   no copies, but when the report says most copies are items the sidebar actor doesn't have, a fresh token would be
   missing them. Archiving the scene is the safe way to take those tokens out of the load.
+- **Find leftover and repeated tokens.** The planner's *Tokens by actor* tab counts every token by the sidebar
+  actor it was placed from and lists the scenes each actor's tokens are on, with a button per token that takes you
+  to it. It shows an adventure that placed dozens of one creature, player characters left on old maps (linked
+  copies cost little at load but turn up when the party returns), and unlinked copies of a character, which store
+  the character's items and don't share its sheet. Sort by size to see which actor's tokens weigh the most.
 - **Be careful moving NPCs out of the sidebar.** Every world actor is sent to and prepared by every client, but an
   unlinked token needs its sidebar actor to exist, including tokens on archived scenes that you may bring back. Only
   move actors no scene uses, and keep IDs if you do.
@@ -118,6 +123,9 @@ Two things it showed. The server wait and Sequencer's check shrink with the worl
 because a token's actor is only built when something first reads it (drawing its scene, or Sequencer's check), so
 most of the build is world actors and the other documents. And Sequencer's freeze is the GM's alone: its migration
 check reads every token's actor on every scene, on the GM only.
+
+Later, removing the adventure's original copies of maps the GM had rebuilt (89 to 61 scenes, 751 to 304 tokens)
+took the world data from 98.6 to 69.9 MB and Sequencer's ready handler from 9.3 to 3.0 s.
 
 The report's *Load history on this computer* table keeps the last 20 loads, so each player can see the same
 before-and-after for their own machine without anyone writing it down.

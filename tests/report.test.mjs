@@ -258,7 +258,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
   assert.match(scenes.detail, /tokens 90\.0 MB.*own actor data \(their "delta"\) is 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
   const copies = findings.find(f => f.title === "Unlinked tokens store 78.0 MB of their own item copies");
   assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 1000 differ from the sidebar actor's version of the same item, 1000 are items the sidebar actor doesn't have, and 50000 are identical to it apart from timestamps\. 300 of the added items share a name and type/);
-  assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan"], "the GM gets the planner button");
+  assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan", "openTokenCensus"], "the GM gets the planner buttons");
   assert.match(copies.detail, /probably show that item twice: Guard on Vallaki \(Spear\)\./);
   assert.match(copies.fix, /only replace tokens the party hasn't met/, "few additions: replacing is an option");
 

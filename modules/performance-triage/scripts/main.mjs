@@ -41,9 +41,10 @@ async function openProfiles() {
   return ProfilesApp.open();
 }
 
-async function openScenePlan() {
+/** @param {{tab?: "plan"|"tokens"}} [options]  "tokens" opens the count of tokens by actor */
+async function openScenePlan(options) {
   const { ScenePlanApp } = await import("./apps/scene-plan-app.mjs");
-  return ScenePlanApp.open();
+  return ScenePlanApp.open(options);
 }
 
 /** Settings menus need a class at registration time; these stand-ins load the real application on demand. */

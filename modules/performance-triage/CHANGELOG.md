@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.7.0
+
+- **Tokens by actor**: a second tab in the scene planner (renamed from scene archive planner) counts every token on
+  every world scene by the sidebar actor it was placed from, most first, sortable by any column. Each actor opens to
+  the scenes its tokens are on, with a button per token that views the scene for the GM, selects the token and
+  centres on it. It filters by actor, token or scene name and by player-owned actors, lists player-owned actors with
+  several tokens on one scene or unlinked copies, and recounts when tokens are created or deleted while it is open.
+  The report's token findings and world section link to it.
+
 ## 0.6.0
 
 From the GM's notes on the first archive and restore:

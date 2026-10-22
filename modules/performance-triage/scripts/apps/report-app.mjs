@@ -28,7 +28,8 @@ export class ReportApp extends ApplicationV2 {
       measureFrameCost: ReportApp.#onMeasureFrameCost,
       useLowProfile: ReportApp.#onUseLowProfile,
       openProfiles: () => game.modules.get(MODULE_ID).api.openProfiles(),
-      openScenePlan: () => game.modules.get(MODULE_ID).api.openScenePlan()
+      openScenePlan: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "plan" }),
+      openTokenCensus: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "tokens" })
     }
   };
 

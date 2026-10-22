@@ -40,6 +40,18 @@ const CSS = `
 .ptriage-area > p { margin: 0.25rem 0; }
 .ptriage-plan ol { margin: 0.3rem 0 0.3rem 1.2rem; padding: 0; }
 .ptriage-plan ol li { margin-bottom: 0.25rem; }
+.ptriage-tabs { display: flex; gap: 0.25rem; border-bottom: 1px solid var(--color-border, #7a7971); margin-bottom: 0.5rem; }
+.ptriage-tabs button { flex: 0 0 auto; width: auto; padding: 0 0.8rem; border-radius: 4px 4px 0 0; opacity: 0.7; }
+.ptriage-tabs button.active { opacity: 1; font-weight: bold; }
+.ptriage-census-filter { align-items: center; }
+.ptriage-census-filter input[type=search] { flex: 1 1 16em; max-width: 24em; }
+.ptriage-census-filter label { display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+.ptriage-census th.ptriage-sort { cursor: pointer; user-select: none; }
+.ptriage-census-row { cursor: pointer; }
+.ptriage-census-row:hover { background: rgba(127,127,127,0.12); }
+.ptriage-census-detail > td { padding-left: 1.2rem; }
+.ptriage-chip { display: inline-block; width: auto; line-height: 1.5; margin: 0 0.2rem 0.2rem 0; padding: 0 0.4rem; font-size: 0.9em; }
+.ptriage-chip-flag { border-color: #b26a00; }
 `;
 
 export function injectStyle() {
