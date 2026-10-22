@@ -258,7 +258,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
   assert.match(scenes.detail, /tokens 90\.0 MB.*own actor data \(their "delta"\) is 80\.0 MB.*Castle Ravenloft 12\.0 MB \(90 tokens, 3000 walls\)/);
   const copies = findings.find(f => f.title === "Unlinked tokens store 78.0 MB of their own item copies");
   assert.match(copies.detail, /1200 of 1460 unlinked tokens store their own copies of 52000 items\. 1000 differ from the sidebar actor's version of the same item, 1000 are items the sidebar actor doesn't have, and 50000 are identical to it apart from timestamps\. 300 of the added items share a name and type/);
-  assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan"], "the GM gets the planner button");
+  assert.deepEqual(copies.actions.map(a => a.id), ["openScenePlan", "openTokenCensus"], "the GM gets the planner buttons");
   assert.match(copies.detail, /probably show that item twice: Guard on Vallaki \(Spear\)\./);
   assert.match(copies.fix, /only replace tokens the party hasn't met/, "few additions: replacing is an option");
 
@@ -273,7 +273,7 @@ test("scene, settings and actor payload findings explain what is big", () => {
     /some-module 6\.0 MB\. Largest settings: some-module\.cache 5\.0 MB\. /);
   assert.match(findings.find(f => f.title.startsWith("World actors are")).detail, /Strahd 1\.0 MB \(58 items\)/);
   const html = reportToHtml({ ...report, findings });
-  for ( const caption of ["Largest scenes", "Token data by sidebar actor", "Largest tokens", "Largest world settings"] ) {
+  for ( const caption of ["Largest scenes", "Token data by the sidebar actor", "Largest tokens", "Largest world settings"] ) {
     assert.ok(html.includes(caption), caption);
   }
 });
@@ -313,3 +313,76 @@ test("a known listener in a freeze gets an explanation, and leftover textures ar
   assert.match(tex.fix, /reload to free it/);
 });
 
+test("items repeated on many tokens are named, with their flags, and token names show under their actor", () => {
+  const MB = 1024 * 1024;
+  const report = heavyWorldReport();
+  report.env.isGM = true;
+  report.payload = {
+    sections: [{ key: "scenes", bytes: 62 * MB, count: 89 }], packs: [],
+    detail: { scenes: { bytes: 62 * MB, tokenDelta: 50 * MB, parts: [{ key: "tokens", bytes: 55 * MB }], largest: [],
+      tokens: {
+        count: 751, linked: 102, unlinked: 649, deltaBytes: 50 * MB, items: 10345, withItems: 635,
+        parts: [{ key: "items", bytes: 47.7 * MB }], same: { items: 0, bytes: 0 },
+        added: { items: 10293, duplicates: 41, examples: [] }, linkedDelta: { tokens: 0, bytes: 0 }, missingActor: { tokens: 0, bytes: 0 },
+        largest: [],
+        byActor: [{ actor: "Mongrelfolk", tokens: 72, bytes: 4.3 * MB, items: 1080, same: 0,
+          names: [{ name: "Mongrelfolk", count: 4 }, { name: "Clovin Belview", count: 1 }], distinctNames: 30 }],
+        repeated: { items: 9000, bytes: 40 * MB, top: [
+          { name: "Shove", type: "feat", tokens: 640, bytes: 4 * MB, flags: ["chris-premades"] },
+          { name: "Dash", type: "feat", tokens: 640, bytes: 3 * MB, flags: ["chris-premades", "midi-qol"] }
+        ] }
+      } } }
+  };
+  const findings = recommend(report);
+  const f = findings.find(x => x.title.startsWith("Unlinked tokens store"));
+  assert.match(f.detail, /40\.0 MB of it is the same items repeated on many tokens: Shove \(640 tokens\), Dash \(640 tokens\)\. They carry flags from chris-premades, midi-qol/);
+  assert.match(f.fix, /one copy per actor instead of one per token/);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("Mongrelfolk ×4, Clovin Belview, and 28 more"));
+  assert.ok(html.includes("Items repeated on many tokens: 9000 copies, 40.0 MB"));
+});
+
+
+test("settings of inactive modules, repeated setting entries and actors on no scene become advice", () => {
+  const report = heavyWorldReport();
+  report.env.isGM = true;
+  report.payload = {
+    sections: [{ key: "actors", bytes: 23 * MB, count: 377 }, { key: "settings", bytes: 7 * MB, count: 1326 }], packs: [],
+    detail: {
+      settings: { bytes: 7 * MB, byPackage: [{ key: "autoanimations", bytes: 4.2 * MB, count: 23 }],
+        largest: [{ key: "autoanimations.aaAutorec-ontoken", bytes: 2 * MB, entries: 900, sameLabel: 400, identical: 380 },
+          { key: "beneos-module.beneos-database-local-storage", bytes: 1.9 * MB }],
+        unowned: { bytes: 1.95 * MB, count: 4, packages: [{ key: "beneos-module", bytes: 1.9 * MB, count: 3, state: "missing" },
+          { key: "tiny", bytes: 1000, count: 1, state: "inactive" }] } },
+      actors: { bytes: 23 * MB, largest: [{ name: "Lunet", type: "character", bytes: 1.1 * MB, items: 171 }],
+        playerOwned: { count: 9, bytes: 5 * MB },
+        unused: { count: 300, bytes: 15 * MB, byType: [{ type: "npc", count: 280, bytes: 12 * MB }, { type: "character", count: 20, bytes: 3 * MB }] } }
+    }
+  };
+  report.longFrames.play.packages = [{ key: "module:performance-triage", count: 48, duration: 2834, layout: 28 },
+    { key: "module:midi-qol", count: 9, duration: 900, layout: 100 }];
+  const findings = recommend(report);
+  const unowned = findings.find(f => f.title === "1.9 MB of world settings belong to modules that aren't active");
+  assert.ok(unowned, findings.map(f => f.title).join("\n"));
+  assert.equal(unowned.severity, "medium");
+  assert.match(unowned.detail, /^beneos-module \(not installed\): 1\.9 MB in 3 settings\. /, "tiny groups aren't listed");
+  assert.match(unowned.fix, /getSetting\("<key>"\)\?\.delete\(\), for example with beneos-module\.beneos-database-local-storage\./);
+  const settings = findings.find(f => f.title === "World settings are 7.0 MB");
+  assert.match(settings.detail, /autoanimations\.aaAutorec-ontoken 2\.0 MB \(900 entries, 400 repeat a label\)/);
+  assert.match(settings.fix, /imported more than once/);
+  const actors = findings.find(f => f.title === "World actors are 23.0 MB of the world data");
+  assert.match(actors.detail, /300 actors \(15\.0 MB\) are on no world scene and no player owns them: npc 280 \(12\.0 MB\), character 20 \(3\.0 MB\)\./);
+  assert.match(actors.fix, /keeping IDs/);
+  assert.deepEqual(actors.actions.map(a => a.id), ["openTokenCensus"]);
+  const frames = findings.find(f => f.title === "Modules that started long frames during play");
+  assert.match(frames.detail, /^midi-qol: 900 ms in 9 scripts\. Performance Triage's own 2834 ms is left out/);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("World settings of packages that aren&#39;t active"));
+  assert.ok(html.includes("Actors on no world scene that no player owns: 300 (15.0 MB)"));
+});
+
+test("this module's own long frames alone raise no finding", () => {
+  const report = sampleReport();
+  report.longFrames.play.packages = [{ key: "module:performance-triage", count: 48, duration: 2834, layout: 28 }];
+  assert.ok(!recommend(report).some(f => f.title === "Modules that started long frames during play"));
+});

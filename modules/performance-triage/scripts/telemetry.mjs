@@ -59,7 +59,8 @@ export function bootstrap() {
     Hooks.once("init", () => {
       payload.then(({ measurePayload }) => {
         const t0 = performance.now();
-        telemetry.payload = measurePayload(game.data);
+        telemetry.payload = measurePayload(game.data,
+          { modules: game.modules?.values(), systemId: game.system?.id, worldId: game.world?.id });
         telemetry.payload.ms = Math.round(performance.now() - t0);
       }).catch(err => console.warn("performance-triage | Could not measure the world data", err));
     });

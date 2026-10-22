@@ -121,3 +121,71 @@ test("token item copies are split into matching, differing and added items, and 
   assert.deepEqual(t.added, { items: 2, duplicates: 1, examples: [{ scene: "Crypt", token: "Ghoul", items: ["Claw"] }] });
 });
 
+test("items added to many tokens are grouped by name, type and size, and token names are kept per actor", () => {
+  const base = { _id: "a1", name: "Mongrelfolk", items: [{ _id: "b1", name: "Bite", type: "weapon" }] };
+  const action = (id, name) => ({ _id: id.padEnd(16, "x"), name, type: "feat", system: { activation: "action" }, flags: { "chris-premades": { generic: true } } });
+  const tokens = Array.from({ length: 6 }, (_, i) => ({
+    _id: `t${i}`, name: i < 2 ? "Mongrelfolk" : `Villager ${i}`, actorId: "a1", actorLink: false,
+    delta: { items: [action(`d${i}`, "Dash"), action(`s${i}`, "Shove"), ...(i === 0 ? [action("u0", "Unique trick")] : [])] }
+  }));
+  const t = measurePayload({ actors: [base], scenes: [{ _id: "s1", name: "Abbey", tokens }] }).detail.scenes.tokens;
+  assert.deepEqual(t.repeated.top.map(r => [r.name, r.tokens, r.flags]), [["Shove", 6, ["chris-premades"]], ["Dash", 6, ["chris-premades"]]], "largest share first");
+  assert.equal(t.repeated.items, 12, "the one-off item is not counted as repeated");
+  const g = t.byActor[0];
+  assert.deepEqual([g.actor, g.tokens, g.distinctNames], ["Mongrelfolk", 6, 5]);
+  assert.deepEqual(g.names[0], { name: "Mongrelfolk", count: 2 });
+});
+
+
+test("settings of modules that aren't active are marked, and large list settings are counted", () => {
+  const menu = JSON.stringify([
+    { label: "Fire Bolt", animation: "fire" }, { label: "Fire Bolt", animation: "fire" },
+    { label: "Fire Bolt", animation: "fire2" }, { label: "Shove", animation: "push" }
+  ]);
+  const out = measurePayload({
+    settings: [
+      { key: "autoanimations.aaAutorec-ontoken", value: menu },
+      { key: "beneos-module.beneos-database-local-storage", value: JSON.stringify("b".repeat(3000)) },
+      { key: "old-module.cache", value: "{}" },
+      { key: "dnd5e.rulesVersion", value: "\"modern\"" },
+      { key: "core.time", value: "0" },
+      { key: "cos-world.flag", value: "1" }
+    ]
+  }, {
+    // game.modules is a Collection; its values() are the installed modules
+    modules: new Map([["autoanimations", { id: "autoanimations", active: true }], ["old-module", { id: "old-module", active: false }]]).values(),
+    systemId: "dnd5e",
+    worldId: "cos-world"
+  });
+  const { unowned, largest } = out.detail.settings;
+  assert.deepEqual(unowned.packages.map(g => [g.key, g.state]), [["beneos-module", "missing"], ["old-module", "inactive"]],
+    "core, the system, the world and active modules own theirs");
+  assert.equal(unowned.count, 2);
+  const aa = largest.find(x => x.key === "autoanimations.aaAutorec-ontoken");
+  assert.deepEqual([aa.entries, aa.sameLabel, aa.identical], [4, 2, 1]);
+  assert.equal(largest.find(x => x.key === "beneos-module.beneos-database-local-storage").entries, undefined,
+    "a string has no entries");
+});
+
+test("without package information no settings are marked", () => {
+  const out = measurePayload({ settings: [{ key: "gone.x", value: "1" }] });
+  assert.equal(out.detail.settings.unowned, null);
+});
+
+test("actors that no world scene uses and no player owns are counted by type", () => {
+  const out = measurePayload({
+    users: [{ _id: "gm", role: 4 }, { _id: "p1", role: 1 }],
+    actors: [
+      { _id: "a1", name: "Wolf", type: "npc", items: [] },
+      { _id: "a2", name: "Strahd", type: "npc", items: [{ name: "Bite" }] },
+      { _id: "a3", name: "Lunet", type: "character", ownership: { default: 0, p1: 3 }, items: [] },
+      { _id: "a4", name: "Old PC", type: "character", ownership: { default: 0, gm: 3 }, items: [] },
+      { _id: "a5", name: "Shared", type: "npc", ownership: { default: 3 }, items: [] }
+    ],
+    scenes: [{ _id: "s1", name: "Road", tokens: [{ _id: "t1", actorId: "a1", delta: {} }] }]
+  });
+  const { unused, playerOwned } = out.detail.actors;
+  assert.equal(playerOwned.count, 2, "owned by a player directly, or by everyone through the default level");
+  assert.equal(unused.count, 2, "Strahd and the GM-only character; the wolf has a token");
+  assert.deepEqual(unused.byType.map(t => [t.type, t.count]).sort(), [["character", 1], ["npc", 1]]);
+});

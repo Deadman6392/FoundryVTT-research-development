@@ -162,7 +162,8 @@ export function installFoundry({ userId = "player1", role = 1, activeModules = [
     foundry: {
       applications: {
         api: {
-          ApplicationV2: class {},
+          // Lifecycle methods are no-op hooks in Foundry, there for subclasses to extend
+          ApplicationV2: class { _onClose() {} },
           DialogV2: { confirm: async opts => { dialogs.push(opts); return false; } }
         },
         sidebar: { apps: { SupportDetails: { getWebGLRendererInfo: () => "Mock GPU" } } }

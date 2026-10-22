@@ -45,9 +45,9 @@
         "Hint": "Assign performance profiles to players whose computers struggle."
       },
       "ScenePlan": {
-        "Name": "Scene archive planner",
-        "Label": "Plan scene archiving",
-        "Hint": "Rank scenes by how much world data they cost every player at load, and list what to prepare before moving them to a compendium."
+        "Name": "Scene planner",
+        "Label": "Open the scene planner",
+        "Hint": "Rank scenes by how much world data they cost every player at load, list what to prepare before moving them to a compendium, and count tokens by actor across every scene to find leftover copies."
       }
     },
     "Reload": {
@@ -87,9 +87,13 @@
       "Saved": "Profile assignments saved. Affected players are asked to reload."
     },
     "ScenePlan": {
-      "Title": "Scene archive planner",
+      "Title": "Scene planner",
       "Copied": "Prep checklist copied to the clipboard.",
       "Measuring": "Measuring every scene. On a large world this takes a second or two."
+    },
+    "Census": {
+      "Gone": "That token is no longer on its scene. Refresh to count again.",
+      "NoCanvas": "The game canvas is turned off on this computer, so the token can't be shown."
     }
   }
 }

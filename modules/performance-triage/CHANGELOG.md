@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.8.0
+
+From the report after clearing tokens off the maps (12 tokens left, world data 42 MB, actors over half of it):
+
+- **Actors and tokens** (the planner tab, renamed from Tokens by actor) lists every sidebar actor, including those no
+  world scene uses, with the actor's own size. *On no scene* filters to those, heaviest first; opening one shows its
+  folder and the journal entries and macros linking to it, which break while it is in a compendium.
+- **Actors on no scene**: with the hook profiler on, the report counts actors no token on a world scene uses and no
+  player owns, by type, and the actor finding says how to move them to a compendium keeping IDs.
+- **Settings of inactive modules**: world settings whose package is disabled or not installed are listed with their
+  size, since Foundry still sends them to every client, with a macro to delete one.
+- **Large list settings**: the largest settings show how many entries they hold and how many repeat another entry's
+  label or content.
+- Long frames from this module's own measurements (timing actors) no longer appear in the finding about modules
+  that started long frames during play; the table still shows them.
+
+## 0.7.0
+
+- **Tokens by actor**: a second tab in the scene planner (renamed from scene archive planner) counts every token on
+  every world scene by the sidebar actor it was placed from, most first, sortable by any column. Each actor opens to
+  the scenes its tokens are on, with a button per token that views the scene for the GM, selects the token and
+  centres on it. It filters by actor, token or scene name and by player-owned actors, lists player-owned actors with
+  several tokens on one scene or unlinked copies, and recounts when tokens are created or deleted while it is open.
+  The report's token findings and world section link to it.
+
+## 0.6.0
+
+From the GM's notes on the first archive and restore:
+
+- **Fog of war**: archiving deletes players' explored fog on those maps and it doesn't come back with the scene. The
+  planner now marks maps players have explored (from an index of fog records, scene and user only) as needing prep,
+  lists them per area, and says so in the steps instead of asking you to check.
+- **Repeated items on tokens**: items with the same name, type and size on at least five tokens, that the sidebar
+  actor doesn't have, are listed with the module flags they carry. In the measured world these are generic actions a
+  module adds to every placed token; the finding says how much of the token data they are.
+- **Token names under each actor**: tokens are grouped by the sidebar actor they're based on, which an adventure often
+  renames (72 tokens on one generic actor, most with their own names). The report now lists those names.
+- **Load history** records who logged in, since one browser can hold several logins (a GM testing as a player); the
+  median is for the user viewing the report.
+
 ## 0.5.0
 
 From the first archiving session (39 of 128 scenes archived: world data 141.8 to 98.6 MB, GM load 46 to 36 s):

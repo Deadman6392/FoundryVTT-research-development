@@ -105,7 +105,8 @@ export function recommend(report) {
     actorTiming: !report.prep && report.world && { id: "benchmarkActors", label: "Time actor preparation" },
     layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
     lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
-    scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" }
+    scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" },
+    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -196,20 +197,33 @@ export function recommend(report) {
         ? ` ${tk.added.duplicates} of the added items share a name and type with an item the sidebar actor already `
           + `has, so those tokens probably show that item twice${examples ? `: ${examples}` : ""}.`
         : "";
+      // The same few items on many tokens is what a module adding actions to every placed token leaves behind
+      const rep = tk.repeated;
+      const repeatedNote = (rep?.bytes > 0.25 * itemBytes)
+        ? ` ${mb(rep.bytes)} of it is the same items repeated on many tokens: `
+          + rep.top.slice(0, 6).map(r => `${r.name} (${r.tokens} tokens)`).join(", ")
+          + (rep.top[0]?.flags?.length ? `. They carry flags from ${[...new Set(rep.top.flatMap(r => r.flags))].slice(0, 3).join(", ")}, a hint at what added them.` : ".")
+        : "";
       // When most copies are items the sidebar actor lacks, the tokens are the only place those items exist
       const tokensOwnItems = tk.added && (added > tk.items / 2);
-      const fix = tokensOwnItems
+      const repeatedFix = repeatedNote
+        ? " If a module adds those items to every token when it is placed, check whether it can add them to the "
+          + "sidebar actor instead, or skip NPCs: one copy per actor instead of one per token. Copies already on tokens "
+          + "stay until removed."
+        : "";
+      const fix = (tokensOwnItems
         ? "Archive scenes you aren't using; that removes their tokens' data from the load. Don't replace these tokens "
           + "with fresh ones from the sidebar actors to save space: most of their items exist only on the tokens, so "
           + "a fresh token would be missing them."
         : "Archiving scenes you aren't using removes their tokens' data from the load. On scenes you keep, a token "
           + "placed fresh from the sidebar actor carries no copies, but it is the sidebar actor's current version with "
-          + "HP, name and conditions reset, so only replace tokens the party hasn't met.";
+          + "HP, name and conditions reset, so only replace tokens the party hasn't met.") + repeatedFix;
       add("high", "World", `Unlinked tokens store ${mb(itemBytes)} of their own item copies`,
         `${tk.withItems} of ${tk.unlinked} unlinked tokens store their own copies of ${tk.items} items.${split}${doubled} `
         + "An unlinked token normally stores only what differs from its sidebar actor, so a full set of copies means "
-        + `each token carries its own version of every item. Most of it belongs to: ${byActor}.`,
-        fix, [can.scenePlan]);
+        + `each token carries its own version of every item.${repeatedNote} By the sidebar actor the tokens are based `
+        + `on: ${byActor}.`,
+        fix, [can.scenePlan, can.tokenCensus]);
     }
     if ( tk && (tk.linkedDelta.bytes > 1 * MB) ) {
       add("low", "World", `${plural(tk.linkedDelta.tokens, "linked token")} still store ${mb(tk.linkedDelta.bytes)} of actor data`,
@@ -217,19 +231,51 @@ export function recommend(report) {
         + "linked; they are still sent to every client.", "");
     }
     const settings = payload.detail?.settings;
+    // A disabled or uninstalled module's world settings stay in the world and are still sent to every client
+    const unowned = (settings?.unowned?.packages ?? []).filter(g => g.bytes > 0.1 * MB);
+    if ( unowned.length ) {
+      const state = { inactive: "disabled", missing: "not installed" };
+      const names = new Set(unowned.map(g => g.key));
+      const keyHint = (settings.largest ?? []).find(x => names.has(x.key.split(".")[0]))?.key;
+      add((settings.unowned.bytes > 1 * MB) ? "medium" : "low", "World",
+        `${mb(unowned.reduce((a, g) => a + g.bytes, 0))} of world settings belong to modules that aren't active`,
+        unowned.map(g => `${g.key} (${state[g.state]}): ${mb(g.bytes)} in ${plural(g.count, "setting")}`).join("; ")
+        + ". Foundry keeps a module's world settings after it is disabled or uninstalled and still sends them to "
+        + "every client at every load. Nothing reads them while the module is off.",
+        "If you won't turn the module back on, delete them with a script macro run by the GM, one setting key at a "
+        + "time: await game.settings.storage.get(\"world\").getSetting(\"<key>\")?.delete()"
+        + (keyHint ? `, for example with ${keyHint}` : "") + ". A module can store settings under a name other than its "
+        + "id, so check the module list first. If you turn the module on again later it starts from its defaults "
+        + "for those settings.");
+    }
     if ( settings && (settings.bytes > 2 * MB) ) {
       const keys = (settings.largest ?? []).filter(x => x.bytes > 0.25 * MB).slice(0, 5);
+      const entries = x => (x.entries ? ` (${x.entries} entries${x.sameLabel ? `, ${x.sameLabel} repeat a label` : ""})` : "");
+      const repeats = keys.filter(x => x.sameLabel > 0.2 * x.entries);
       add("medium", "World", `World settings are ${mb(settings.bytes)}`,
         "Largest by package: " + settings.byPackage.slice(0, 5).map(g => `${g.key} ${mb(g.bytes)}`).join(", ")
-        + (keys.length ? `. Largest settings: ${keys.map(x => `${x.key} ${mb(x.bytes)}`).join(", ")}` : "")
+        + (keys.length ? `. Largest settings: ${keys.map(x => `${x.key} ${mb(x.bytes)}${entries(x)}`).join(", ")}` : "")
         + ". Settings are loaded by every client; a module storing large data there costs everyone.",
-        "Check that module's options for stored history or caches you can clear, or report it to its author.");
+        "Check that module's options for stored history or caches you can clear, or report it to its author."
+        + (repeats.length ? ` Many entries in ${repeats.map(x => x.key).join(", ")} share a label with another `
+          + "entry, which can mean a menu or preset list was imported more than once; export a backup from the "
+          + "module's own menu before removing any." : ""));
     }
     const actorBytes = payload.detail?.actors;
     if ( actorBytes && (actorBytes.bytes > 10 * MB) ) {
+      const unused = actorBytes.unused;
+      const types = (unused?.byType ?? []).slice(0, 3).map(t => `${t.type || "other"} ${t.count} (${mb(t.bytes)})`).join(", ");
+      const unusedNote = (unused?.count > 0)
+        ? ` ${plural(unused.count, "actor")} (${mb(unused.bytes)}) are on no world scene and no player owns them: ${types}.`
+        : "";
       add("medium", "World", `World actors are ${mb(actorBytes.bytes)} of the world data`,
-        "Largest: " + actorBytes.largest.slice(0, 5).map(a => `${a.name} ${mb(a.bytes)} (${a.items} items)`).join("; ") + ".",
-        "Keep NPCs you aren't using right now in a compendium; drag them in when needed.");
+        "Largest: " + actorBytes.largest.slice(0, 5).map(a => `${a.name} ${mb(a.bytes)} (${a.items} items)`).join("; ")
+        + `.${unusedNote} Every world actor is sent to every client and prepared on it at load.`,
+        "Move actors you won't need soon to an Actor compendium: put them in a folder, right-click it, Export to "
+        + "Compendium with the option to keep IDs, then delete them from the world. Bring them back with the "
+        + "compendium's Import All, keeping IDs, so tokens on archived scenes and journal links find them again; "
+        + "dragging one actor out can give it a new ID. The scene planner's Actors and tokens tab lists which "
+        + "actors no world scene uses.", [can.tokenCensus]);
     }
     const packTop = (payload.packs ?? []).slice(0, 3).filter(p => p.bytes > 2 * MB);
     if ( packTop.length ) {
@@ -346,10 +392,15 @@ export function recommend(report) {
 
   // Long frames attributed by the browser
   const lf = report.longFrames?.play;
-  const lfTop = (lf?.packages ?? []).filter(p => p.key.startsWith("module:") && (p.duration > 500)).slice(0, 5);
+  // This module's long frames during play are measurements someone ran from the report (timing actors, layer
+  // costs); they belong in the table, not in a finding about other modules
+  const own = (lf?.packages ?? []).find(p => p.key === SELF_KEY);
+  const lfTop = (lf?.packages ?? []).filter(p => p.key.startsWith("module:") && (p.key !== SELF_KEY) && (p.duration > 500))
+    .slice(0, 5);
   if ( lfTop.length ) {
     add("medium", "Modules", "Modules that started long frames during play",
-      lfTop.map(p => `${name(p.key)}: ${ms(p.duration)} in ${plural(p.count, "script")}`).join("; "),
+      lfTop.map(p => `${name(p.key)}: ${ms(p.duration)} in ${plural(p.count, "script")}`).join("; ")
+      + (own ? `. Performance Triage's own ${ms(own.duration)} is left out: that is measurements run from this report, such as timing actor preparation.` : ""),
       "These scripts ran as the entry point of frames longer than 50 ms. The CPU profile gives a fuller picture.");
   }
 

@@ -87,7 +87,7 @@ function sections(report, opts = {}) {
       + "computer is building the world. \"ready hook fired\" is when Foundry starts calling ready handlers; the "
       + "game is usable once they finish.",
     tables: [{ head: ["Phase", "At", "Since previous"], rows: tl.map(r => [r.label, fmtMs(r.at), fmtMs(r.delta)]) },
-      ...historyTables(report.history)]
+      ...historyTables(report.history, report.env?.user)]
   });
 
   // Network
@@ -288,7 +288,7 @@ function sections(report, opts = {}) {
     out.push({
       id: "world", title: "World contents", tables: t,
       actions: [["benchmarkActors", "Time actor preparation"],
-        ...(report.env?.isGM ? [["openScenePlan", "Plan scene archiving"]] : [])]
+        ...(report.env?.isGM ? [["openScenePlan", "Plan scene archiving"], ["openTokenCensus", "Actors and tokens"]] : [])]
     });
   }
 
@@ -324,19 +324,21 @@ function sections(report, opts = {}) {
 }
 
 /** Earlier loads on this computer, newest first, recorded a minute after each load. */
-function historyTables(history) {
+function historyTables(history, user) {
   if ( !history?.length ) return [];
   const when = at => {
     const d = new Date(at);
     return Number.isNaN(d.getTime()) ? "–" : d.toLocaleString([], { dateStyle: "short", timeStyle: "short" });
   };
-  const usable = median(history.map(h => h.usable));
+  // Several logins can share one browser (a GM testing as a player), and a GM's load differs from a player's
+  const mine = history.filter(h => !h.user || !user || (h.user === user));
+  const usable = median(mine.map(h => h.usable));
   return [{
-    caption: `Load history on this computer: ${history.length} load${history.length === 1 ? "" : "s"}, median time `
-      + `until usable ${fmtMs(usable)}. Server waits vary between loads, so compare several.`,
-    head: ["When", "Until usable", "Waiting for server", "Building (init to setup)", "Ready handlers", "Scenes",
+    caption: `Load history in this browser: ${history.length} load${history.length === 1 ? "" : "s"}; median time `
+      + `until usable${user ? ` for ${user}` : ""} ${fmtMs(usable)}. Server waits vary between loads, so compare several.`,
+    head: ["When", "User", "Until usable", "Waiting for server", "Building (init to setup)", "Ready handlers", "Scenes",
       "Tokens", "World data", "Frame rate", "Profile"],
-    rows: history.map(h => [when(h.at), fmtMs(h.usable), fmtMs(h.wait), fmtMs(h.build), fmtMs(h.readyHandlers),
+    rows: history.map(h => [when(h.at), h.user ? `${h.user}${h.gm ? " (GM)" : ""}` : "–", fmtMs(h.usable), fmtMs(h.wait), fmtMs(h.build), fmtMs(h.readyHandlers),
       h.scenes ?? "–", h.tokens ?? "–", Number.isFinite(h.worldBytes) ? fmtBytes(h.worldBytes) : "–",
       Number.isFinite(h.fps) ? `${h.fps} fps` : "–", h.profile ?? "–"])
   }];
@@ -374,9 +376,20 @@ function payloadDetailTables(detail) {
         ]
       });
       tables.push({
-        caption: "Token data by sidebar actor", head: ["Actor", "Tokens", "Size", "Item copies"],
-        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items])
+        caption: "Token data by the sidebar actor the tokens are based on (tokens are often renamed)",
+        head: ["Actor", "Tokens", "Size", "Item copies", "Token names"],
+        rows: tk.byActor.map(g => [g.actor ?? "(no actor)", g.tokens, fmtBytes(g.bytes), g.items,
+          (g.names ?? []).map(n => (n.count > 1 ? `${n.name} ×${n.count}` : n.name)).join(", ")
+            + ((g.distinctNames ?? 0) > (g.names?.length ?? 0) ? `, and ${g.distinctNames - g.names.length} more` : "")])
       });
+      if ( tk.repeated?.top?.length ) {
+        tables.push({
+          caption: `Items repeated on many tokens: ${tk.repeated.items} copies, ${fmtBytes(tk.repeated.bytes)}. Same `
+            + "name, type and size on at least 5 tokens, and not on the sidebar actor.",
+          head: ["Item", "Type", "Tokens", "Size", "Flags from"],
+          rows: tk.repeated.top.map(r => [r.name, r.type, r.tokens, fmtBytes(r.bytes), r.flags.join(", ") || "–"])
+        });
+      }
       tables.push({
         caption: "Largest tokens", head: ["Token", "Scene", "Linked", "Size", "Item copies", "Effects"],
         rows: tk.largest.map(t => [t.name, t.scene, t.linked ? "yes" : "no", fmtBytes(t.bytes), t.items, t.effects])
@@ -388,16 +401,35 @@ function payloadDetailTables(detail) {
       caption: "Largest world actors", head: ["Actor", "Type", "Size", "Items"],
       rows: detail.actors.largest.map(a => [a.name, a.type, fmtBytes(a.bytes), a.items])
     });
+    const { unused, playerOwned } = detail.actors;
+    if ( unused?.count ) {
+      tables.push({
+        caption: `Actors on no world scene that no player owns: ${unused.count} (${fmtBytes(unused.bytes)}). `
+          + `Player-owned actors: ${playerOwned.count} (${fmtBytes(playerOwned.bytes)}).`,
+        head: ["Type", "Actors", "Size"],
+        rows: unused.byType.map(t => [t.type || "–", t.count, fmtBytes(t.bytes)])
+      });
+    }
   }
   if ( detail.settings ) {
     tables.push({
       caption: "World settings by package", head: ["Package", "Size", "Settings"],
       rows: detail.settings.byPackage.map(g => [g.key, fmtBytes(g.bytes), g.count])
     });
+    if ( detail.settings.unowned?.packages?.length ) {
+      tables.push({
+        caption: "World settings of packages that aren't active (still sent to every client)",
+        head: ["Package", "State", "Size", "Settings"],
+        rows: detail.settings.unowned.packages.map(g => [g.key, (g.state === "inactive") ? "disabled" : "not installed",
+          fmtBytes(g.bytes), g.count])
+      });
+    }
     if ( detail.settings.largest?.length ) {
       tables.push({
-        caption: "Largest world settings", head: ["Setting", "Size"],
-        rows: detail.settings.largest.map(x => [x.key, fmtBytes(x.bytes)])
+        caption: "Largest world settings. Entries that repeat a label can mean a list was imported twice.",
+        head: ["Setting", "Size", "Entries", "Repeat a label", "Identical"],
+        rows: detail.settings.largest.map(x => [x.key, fmtBytes(x.bytes), x.entries ?? "–", x.sameLabel ?? "–",
+          x.identical ?? "–"])
       });
     }
   }

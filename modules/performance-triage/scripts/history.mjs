@@ -34,7 +34,9 @@ export function recordLoad(profile) {
     },
     worldBytes,
     fps: telemetry.fps?.achieved ?? null,
-    profile
+    profile,
+    user: game.user?.name ?? "",
+    gm: !!game.user?.isGM
   });
   try {
     localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(appendHistory(readHistory(), entry)));
