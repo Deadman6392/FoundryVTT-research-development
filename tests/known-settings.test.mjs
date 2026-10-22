@@ -74,7 +74,7 @@ test("the report names costly settings and aura modules with nothing to do", () 
   assert.equal(settings.severity, "medium");
   assert.match(settings.detail, /Accuracy is Ultra/);
   const auras = findings.find(f => f.title === "3 aura modules check auras when tokens move");
-  assert.equal(auras.severity, "medium");
-  assert.match(auras.detail, /ActiveAuras \(on the GM's computer, on every waypoint, and on every wall or door change\): 0 auras in this world/);
-  assert.match(auras.fix, /^ActiveAuras has no auras here but still runs on every move\. Disable it if/);
+  assert.equal(auras.severity, "info", "using several aura modules is a choice; with no auras in play their cost is small");
+  assert.match(auras.detail, /ActiveAuras \(on the GM's computer, on every waypoint, and on every wall or door change\): 0 auras on actors, tokens and sidebar items/);
+  assert.match(auras.fix, /cheap with a few tokens/);
 });

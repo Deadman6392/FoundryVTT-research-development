@@ -15,11 +15,23 @@ export const frameMs = fps => (fps > 0 ? 1000 / fps : Infinity);
  */
 export function frameCostRows(baseline, measurements, displayLimit = 60) {
   const base = frameMs(baseline);
-  return measurements.map(m => ({
+  const rows = measurements.map(m => ({
     ...m,
     savedMs: Math.round((base - frameMs(m.fps)) * 10) / 10,
     atLimit: m.fps >= displayLimit * 0.95
-  })).sort((a, b) => b.savedMs - a.savedMs);
+  }));
+  // Costliest first, each part listed under the experiment it breaks down
+  const bySaved = (a, b) => b.savedMs - a.savedMs;
+  const out = [];
+  for ( const top of rows.filter(r => !r.parent).sort(bySaved) ) {
+    out.push(top, ...rows.filter(r => r.parent === top.id).sort(bySaved));
+  }
+  return out;
+}
+
+/** Milliseconds per frame saved going from `baseline` to `fps`. */
+export function frameMsSaved(baseline, fps) {
+  return frameMs(baseline) - frameMs(fps);
 }
 
 /**

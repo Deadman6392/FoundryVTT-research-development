@@ -55,7 +55,8 @@ test("frame rate tracking follows the world setting and measures scenes and toke
   telemetry.onPlayFrame({ startTime: performance.now(), duration: 120,
     scripts: [{ sourceURL: "http://localhost:30000/modules/chris-premades/scripts/main.js", duration: 90 }] });
   assert.equal(stats.summary().moves, null, "not closed while waiting");
-  await wait(600);
+  // The move closes on a check after its window and grace period; give a loaded machine's timers some slack
+  for ( let i = 0; (i < 60) && !stats.summary().moves; i++ ) await wait(50);
 
   const summary = stats.summary();
   assert.equal(summary.scenes[0].name, "Abbey");

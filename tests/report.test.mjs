@@ -441,3 +441,30 @@ test("a player's previous session reads as one line for Client profiles", async 
   moves: { count: 12, medianMs: 180 } }),
   "Previous session: slowest scene Castle, about 13 of 30 fps; token moves stall about 180 ms.");
 });
+
+test("layer cost advice uses the breakdown and what is already set on that computer", () => {
+  // Shaped like the work PC's report: Low profile, 48 animated lights not animating, lighting most of the frame
+  const report = sampleReport();
+  report.profile.id = "low";
+  report.client = { ...report.client, renderScale: 1, canvasPerformance: { mode: 0, fps: 30, lightAnimation: false } };
+  report.canvas = { ready: true, textureMemory: 600 * MB, textures: [],
+    scene: { name: "Interior", lights: 48, animatedLights: 48, walls: 623, videoTiles: 0 } };
+  report.frameCost = { scene: "Interior", baseline: 11.6, baselineEnd: 11.2, stable: true, rows: [
+    { id: "effects", label: "Lighting and vision effects", fps: 28, savedMs: 50.5 },
+    { id: "illumination", label: "Lighting: how brightly lights illuminate the map", fps: 20, savedMs: 36.2, parent: "effects" },
+    { id: "coloration", label: "Lighting: light colours", fps: 13, savedMs: 9.3, parent: "effects" },
+    { id: "interface", label: "Interface", fps: 13.2, savedMs: 10.4 },
+    { id: "primary", label: "Everything on the map", fps: 12.8, savedMs: 8.1 }
+  ] };
+  const findings = recommend(report);
+  const layers = findings.find(f => f.title.startsWith("What costs the most to draw on this computer"));
+  assert.equal(layers.title, "What costs the most to draw on this computer (baseline 12 fps on Interior)");
+  assert.match(layers.detail, /^Lighting and vision effects: 50\.5 ms per frame \(illumination 36\.2 ms, light colours 9\.3 ms\); Interface: 10\.4 ms per frame\./);
+  assert.match(layers.fix, /^Most of it is illumination/);
+  assert.match(layers.fix, /already at Low performance mode/);
+  assert.match(layers.fix, /This scene has 48 lights/);
+  assert.match(layers.fix, /Render scale/);
+  assert.ok(!findings.some(f => f.title === "48 animated lights"), "lights aren't animating on this computer");
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("↳ Lighting: how brightly lights illuminate the map"));
+});

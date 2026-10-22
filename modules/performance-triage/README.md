@@ -82,8 +82,10 @@ it needs a reload. Not yet included in any profile.
 
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
-one costs on this computer. It takes about 30 seconds, only changes what this client draws while it runs, and puts
-everything back afterwards. This is the tool for "low frame rate while nothing is moving".
+one costs on this computer. When lighting or the interface costs 5 ms a frame or more, it also measures their parts
+(illumination, light colours, background changes and darkness; grid, drawings, templates, regions, notes and token
+bars). It takes 30 seconds to a minute, only changes what this client draws while it runs, and puts everything back
+afterwards. This is the tool for "low frame rate while nothing is moving".
 
 **Client profiles** (GM-assigned or self-chosen): Balanced, Low, Minimum and Theater of the Mind. Each changes this
 client's own display settings, lowers the number of chat messages rendered at startup, and lowers the canvas frame

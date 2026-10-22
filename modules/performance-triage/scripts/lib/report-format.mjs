@@ -245,7 +245,7 @@ function sections(report, opts = {}) {
       caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseline} fps with everything visible, `
         + `${fc.baselineEnd} fps at the end${fc.stable ? "" : "; drifted, treat as rough"})`,
       head: ["Hidden for the test", "Frame rate", "Time saved per frame"],
-      rows: fc.rows.map(r => [r.label, `${r.fps} fps`, `${r.atLimit ? "at least " : ""}${r.savedMs} ms`])
+      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.fps} fps`, `${r.atLimit ? "at least " : ""}${r.savedMs} ms`])
     });
   }
   out.push({
@@ -253,10 +253,11 @@ function sections(report, opts = {}) {
     title: "Canvas and GPU",
     intro: cv?.ready
       ? "\"Measure layer costs\" hides each part of the canvas for a few seconds and counts frames. It takes about "
-        + "30 seconds; the map will flicker, and nothing is saved or changed for anyone else."
+        + "30 seconds, up to a minute when lighting or the interface cost enough to be broken down into their parts; "
+        + "the map will flicker, and nothing is saved or changed for anyone else."
       : "",
     tables,
-    actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (about 30 s)"]] : []
+    actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (30 to 60 s)"]] : []
   });
 
   // World
@@ -316,8 +317,9 @@ function sections(report, opts = {}) {
       title: "Frame rate during play",
       intro: play.tracking
         ? "Measured on every computer while the GM has it on: the frame rate in five-second stretches while this "
-          + "window had focus (not while idle-throttled), long frames, and the work from each token move on the scene "
-          + "being viewed until two seconds after its animation ended."
+          + "window had focus (not while idle-throttled); stutters, which are frames over 50 ms and over 2.5 times the "
+          + "scene's normal frame time; and, for each token move on the scene being viewed, the time frames took "
+          + "beyond the scene's normal frame time until two seconds after the move's animation ended."
         : "Not being measured. The GM can turn on Measure frame rate during play in this module's settings.",
       tables: t,
       actions: (report.env?.isGM && !play.tracking) ? [["enableTrackPlay", "Measure frame rate during play"]] : []
@@ -354,16 +356,16 @@ function playTables(data, label) {
   if ( data.scenes?.length ) {
     t.push({
       caption: `Frame rate by scene, ${label}${data.at ? ` (${new Date(data.at).toLocaleString()})` : ""}`,
-      head: ["Scene", "Minutes", "Cap", "Median", "Lowest tenth", "Long frames a minute", "Token moves", "Median move stall"],
+      head: ["Scene", "Minutes", "Cap", "Median", "Lowest tenth", "Stutters a minute", "Token moves", "Median move stall"],
       rows: data.scenes.map(x => [x.name, x.minutes, x.target || "none", Number.isFinite(x.fps) ? `${Math.round(x.fps)} fps` : "–",
-        Number.isFinite(x.low) ? `${Math.round(x.low)} fps` : "–", x.longPerMin, x.moves,
+        Number.isFinite(x.low) ? `${Math.round(x.low)} fps` : "–", x.stuttersPerMin ?? x.longPerMin, x.moves,
         Number.isFinite(x.moveMs) ? fmtMs(x.moveMs) : "–"])
     });
   }
   const mv = data.moves;
   if ( mv?.packages?.length ) {
     t.push({
-      caption: `Script time in long frames after token moves, ${label}: ${mv.count} moves, median stall `
+      caption: `Script time in long frames after token moves (drawing the canvas left out), ${label}: ${mv.count} moves, median stall `
         + `${fmtMs(mv.medianMs)}, worst ${fmtMs(mv.worstMs)}, about ${mv.fps} fps while tokens moved`,
       head: ["Package", "Script time", "Share"],
       rows: mv.packages.map(p => [pkg(p.key), fmtMs(p.ms), pct(p.ms, mv.packages.reduce((a, x) => a + x.ms, 0))])

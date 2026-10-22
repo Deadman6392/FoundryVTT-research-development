@@ -103,6 +103,8 @@ function collectAuras() {
   const active = Object.keys(AURA_MODULES).filter(id => game.modules.get(id)?.active);
   if ( active.length < 2 ) return null;
   const owners = game.actors.map(a => a._source);
+  // Custom auras often live on sidebar items (a DAE effect on an item) until they are given to an actor
+  owners.push({ name: "sidebar items", items: game.items.map(i => i._source) });
   for ( const scene of game.scenes ) {
     for ( const t of scene._source.tokens ?? [] ) if ( !t.actorLink && t.delta ) owners.push({ name: t.name, ...t.delta });
   }
