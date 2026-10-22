@@ -125,3 +125,36 @@ test("the filter matches actor, token and scene names, and can keep only player-
   assert.ok(!matchesFilter(search("mongrel"), { players: true }));
   assert.ok(matchesFilter(search("ireena"), { players: true, text: "" }));
 });
+
+test("sidebar actors no scene uses get a row, with their size, folder and the links that would break", () => {
+  // Real-looking 16 character ids, since links are only recognised by Foundry's id format
+  const STRAHD = "strahd0000000000";
+  const BAT = "bat0000000000000";
+  const input = world();
+  input.actors.set(STRAHD, { name: "Strahd", type: "npc", player: false, bytes: 400_000, folder: "NPCs / Castle" });
+  input.actors.set(BAT, { name: "Bat", type: "npc", player: false, bytes: 9_000, folder: "" });
+  input.actors.set("oldpc", { name: "Old PC", type: "character", player: true, bytes: 600_000 });
+  input.journals = [{ _id: "j1", name: "Strahd's Letter",
+    pages: [{ text: { content: `@UUID[Actor.${STRAHD}] and @UUID[Compendium.world.npcs.Actor.${BAT}]` } }] }];
+  input.macros = [{ _id: "m1", name: "Summon", command: `fromUuid("Actor.${STRAHD}")` }];
+  const c = censusTokens(input);
+  const strahd = c.actors.find(g => g.name === "Strahd");
+  assert.deepEqual([strahd.tokens, strahd.actorBytes, strahd.folder], [0, 400_000, "NPCs / Castle"]);
+  assert.deepEqual(strahd.links, [{ type: "journal", name: "Strahd's Letter" }, { type: "macro", name: "Summon" }]);
+  assert.deepEqual(c.actors.find(g => g.name === "Bat").links, [], "a link to a compendium copy isn't a link to the world actor");
+  assert.ok(c.actors.indexOf(strahd) < c.actors.indexOf(c.actors.find(g => g.name === "Bat")),
+    "among actors with no tokens, the heaviest come first");
+  assert.equal(sortCensus(c.actors, { key: "actorBytes" })[0].name, "Old PC");
+
+  const html = censusToHtml(c, { expanded: new Set([STRAHD]) });
+  assert.match(html, /On no scene, no player owner<\/span><strong>2 \(399\.4 KB\)/, "a player's character isn't a candidate");
+  assert.match(html, /Sidebar actors on a scene<\/span><strong>3 of 6/);
+  assert.match(html, /No token on a world scene uses this actor \(folder: NPCs \/ Castle\)/);
+  assert.match(html, /Linked from Strahd&#39;s Letter \(journal\), Summon \(macro\)/);
+  assert.match(html, /data-key="actorBytes" class="ptriage-sort">Actor data/);
+  assert.ok(matchesFilter({ search: "strahd", player: false, tokens: 0 }, { unused: true }));
+  assert.ok(!matchesFilter({ search: "wolf", player: false, tokens: 1 }, { unused: true }));
+  assert.ok(matchesFilter({ search: "npcs / castle\nstrahd", player: false, tokens: 0 }, { text: "castle" }), "folders are searchable");
+  assert.deepEqual(playerNotes(c).slice(0, 1), playerNotes(censusTokens(world())).slice(0, 1),
+    "a player's character with no token doesn't change the player summary");
+});

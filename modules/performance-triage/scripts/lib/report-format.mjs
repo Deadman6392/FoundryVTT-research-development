@@ -288,7 +288,7 @@ function sections(report, opts = {}) {
     out.push({
       id: "world", title: "World contents", tables: t,
       actions: [["benchmarkActors", "Time actor preparation"],
-        ...(report.env?.isGM ? [["openScenePlan", "Plan scene archiving"], ["openTokenCensus", "Tokens by actor"]] : [])]
+        ...(report.env?.isGM ? [["openScenePlan", "Plan scene archiving"], ["openTokenCensus", "Actors and tokens"]] : [])]
     });
   }
 
@@ -401,16 +401,35 @@ function payloadDetailTables(detail) {
       caption: "Largest world actors", head: ["Actor", "Type", "Size", "Items"],
       rows: detail.actors.largest.map(a => [a.name, a.type, fmtBytes(a.bytes), a.items])
     });
+    const { unused, playerOwned } = detail.actors;
+    if ( unused?.count ) {
+      tables.push({
+        caption: `Actors on no world scene that no player owns: ${unused.count} (${fmtBytes(unused.bytes)}). `
+          + `Player-owned actors: ${playerOwned.count} (${fmtBytes(playerOwned.bytes)}).`,
+        head: ["Type", "Actors", "Size"],
+        rows: unused.byType.map(t => [t.type || "–", t.count, fmtBytes(t.bytes)])
+      });
+    }
   }
   if ( detail.settings ) {
     tables.push({
       caption: "World settings by package", head: ["Package", "Size", "Settings"],
       rows: detail.settings.byPackage.map(g => [g.key, fmtBytes(g.bytes), g.count])
     });
+    if ( detail.settings.unowned?.packages?.length ) {
+      tables.push({
+        caption: "World settings of packages that aren't active (still sent to every client)",
+        head: ["Package", "State", "Size", "Settings"],
+        rows: detail.settings.unowned.packages.map(g => [g.key, (g.state === "inactive") ? "disabled" : "not installed",
+          fmtBytes(g.bytes), g.count])
+      });
+    }
     if ( detail.settings.largest?.length ) {
       tables.push({
-        caption: "Largest world settings", head: ["Setting", "Size"],
-        rows: detail.settings.largest.map(x => [x.key, fmtBytes(x.bytes)])
+        caption: "Largest world settings. Entries that repeat a label can mean a list was imported twice.",
+        head: ["Setting", "Size", "Entries", "Repeat a label", "Identical"],
+        rows: detail.settings.largest.map(x => [x.key, fmtBytes(x.bytes), x.entries ?? "–", x.sameLabel ?? "–",
+          x.identical ?? "–"])
       });
     }
   }

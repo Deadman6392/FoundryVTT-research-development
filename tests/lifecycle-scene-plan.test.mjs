@@ -31,8 +31,11 @@ Object.assign(game, {
   macros: collection([]),
   users: collection([{ id: "p1", name: "Alice", active: true, viewedScene: "scene00000000003" },
     { id: "p2", name: "Bob", active: false, viewedScene: "scene00000000002" }, { id: "gm1", name: "GM", isGM: true, active: true }]),
-  actors: collection([{ id: "a1", name: "Bandit", type: "npc", hasPlayerOwner: false },
-    { id: "a2", name: "Ezmerelda", type: "character", hasPlayerOwner: true }]),
+  actors: collection([
+    { id: "a1", name: "Bandit", type: "npc", hasPlayerOwner: false, _source: { _id: "a1", name: "Bandit", folder: null } },
+    { id: "a2", name: "Ezmerelda", type: "character", hasPlayerOwner: true, _source: { _id: "a2", name: "Ezmerelda", folder: null } },
+    { id: "a3", name: "Rahadin", type: "npc", hasPlayerOwner: false, _source: { _id: "a3", name: "Rahadin", folder: "f8", items: [] } }
+  ]),
   packs: collection([
     // The GM's archive: one scene still in the world (kept after a restore), one only in the compendium
     { documentName: "Scene", metadata: { packageType: "world" }, collection: "world.archive-vallaki", title: "Archive: Vallaki",
@@ -43,7 +46,8 @@ Object.assign(game, {
   folders: collection([
     { id: "f0", name: "Barovia", type: "Scene", _source: { folder: null } },
     { id: "f1", name: "Village", type: "Scene", _source: { folder: "f0" } },
-    { id: "f9", name: "Monsters", type: "Actor", _source: { folder: null } }
+    { id: "f9", name: "Monsters", type: "Actor", _source: { folder: null } },
+    { id: "f8", name: "Castle", type: "Actor", _source: { folder: "f9" } }
   ])
 });
 
@@ -116,6 +120,9 @@ test("counts tokens by actor from world collections", () => {
   assert.equal(pc.scenes[0].name, "Crypt");
   assert.equal(pc.scenes[0].inUse, true, "an online player is viewing it");
   assert.equal(census.actors.find(g => g.id === "a1").scenes[0].folder, "Barovia / Village");
+  const unused = census.actors.find(g => g.id === "a3");
+  assert.deepEqual([unused.tokens, unused.folder], [0, "Monsters / Castle"], "actor folders, not scene folders");
+  assert.equal(unused.actorBytes, JSON.stringify(game.actors.get("a3")._source).length);
 });
 
 test("the token tab recounts once per burst of token changes and stops listening when closed", async () => {

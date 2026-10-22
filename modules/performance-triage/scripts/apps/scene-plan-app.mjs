@@ -12,7 +12,7 @@ import { injectStyle } from "./style.mjs";
 
 const { ApplicationV2 } = foundry.applications.api;
 
-const TABS = { plan: "Archive plan", tokens: "Tokens by actor" };
+const TABS = { plan: "Archive plan", tokens: "Actors and tokens" };
 
 /** Tokens are often pasted or deleted in groups; recount once a burst settles instead of once per token. */
 const RECOUNT_MS = 300;
@@ -62,7 +62,7 @@ export class ScenePlanApp extends ApplicationV2 {
   #expanded = new Set();
 
   #sort = { key: "tokens" };
-  #filter = { text: "", players: false };
+  #filter = { text: "", players: false, unused: false };
 
   /** Token hooks, only registered while the token count is open. */
   #hooks = null;
@@ -110,23 +110,26 @@ export class ScenePlanApp extends ApplicationV2 {
     }
     // Filtering only hides rows, so typing never re-renders or loses focus
     const text = content.querySelector("input[name=censusText]");
-    const players = content.querySelector("input[name=censusPlayers]");
-    if ( !text || !players ) return;
+    if ( !text ) return;
     text.addEventListener("input", () => {
       this.#filter.text = text.value;
       this.#applyFilter(content);
     });
-    players.addEventListener("change", () => {
-      this.#filter.players = players.checked;
-      this.#applyFilter(content);
-    });
+    for ( const [name, key] of [["censusPlayers", "players"], ["censusUnused", "unused"]] ) {
+      const box = content.querySelector(`input[name=${name}]`);
+      box?.addEventListener("change", () => {
+        this.#filter[key] = box.checked;
+        this.#applyFilter(content);
+      });
+    }
     this.#applyFilter(content);
   }
 
   #applyFilter(content) {
     let shown = 0;
     for ( const body of content.querySelectorAll("tbody[data-actor]") ) {
-      const match = matchesFilter({ search: body.dataset.search, player: body.dataset.player === "1" }, this.#filter);
+      const row = { search: body.dataset.search, player: body.dataset.player === "1", tokens: Number(body.dataset.tokens) };
+      const match = matchesFilter(row, this.#filter);
       body.hidden = !match;
       if ( match ) shown++;
     }

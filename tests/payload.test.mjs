@@ -136,3 +136,56 @@ test("items added to many tokens are grouped by name, type and size, and token n
   assert.deepEqual(g.names[0], { name: "Mongrelfolk", count: 2 });
 });
 
+
+test("settings of modules that aren't active are marked, and large list settings are counted", () => {
+  const menu = JSON.stringify([
+    { label: "Fire Bolt", animation: "fire" }, { label: "Fire Bolt", animation: "fire" },
+    { label: "Fire Bolt", animation: "fire2" }, { label: "Shove", animation: "push" }
+  ]);
+  const out = measurePayload({
+    settings: [
+      { key: "autoanimations.aaAutorec-ontoken", value: menu },
+      { key: "beneos-module.beneos-database-local-storage", value: JSON.stringify("b".repeat(3000)) },
+      { key: "old-module.cache", value: "{}" },
+      { key: "dnd5e.rulesVersion", value: "\"modern\"" },
+      { key: "core.time", value: "0" },
+      { key: "cos-world.flag", value: "1" }
+    ]
+  }, {
+    // game.modules is a Collection; its values() are the installed modules
+    modules: new Map([["autoanimations", { id: "autoanimations", active: true }], ["old-module", { id: "old-module", active: false }]]).values(),
+    systemId: "dnd5e",
+    worldId: "cos-world"
+  });
+  const { unowned, largest } = out.detail.settings;
+  assert.deepEqual(unowned.packages.map(g => [g.key, g.state]), [["beneos-module", "missing"], ["old-module", "inactive"]],
+    "core, the system, the world and active modules own theirs");
+  assert.equal(unowned.count, 2);
+  const aa = largest.find(x => x.key === "autoanimations.aaAutorec-ontoken");
+  assert.deepEqual([aa.entries, aa.sameLabel, aa.identical], [4, 2, 1]);
+  assert.equal(largest.find(x => x.key === "beneos-module.beneos-database-local-storage").entries, undefined,
+    "a string has no entries");
+});
+
+test("without package information no settings are marked", () => {
+  const out = measurePayload({ settings: [{ key: "gone.x", value: "1" }] });
+  assert.equal(out.detail.settings.unowned, null);
+});
+
+test("actors that no world scene uses and no player owns are counted by type", () => {
+  const out = measurePayload({
+    users: [{ _id: "gm", role: 4 }, { _id: "p1", role: 1 }],
+    actors: [
+      { _id: "a1", name: "Wolf", type: "npc", items: [] },
+      { _id: "a2", name: "Strahd", type: "npc", items: [{ name: "Bite" }] },
+      { _id: "a3", name: "Lunet", type: "character", ownership: { default: 0, p1: 3 }, items: [] },
+      { _id: "a4", name: "Old PC", type: "character", ownership: { default: 0, gm: 3 }, items: [] },
+      { _id: "a5", name: "Shared", type: "npc", ownership: { default: 3 }, items: [] }
+    ],
+    scenes: [{ _id: "s1", name: "Road", tokens: [{ _id: "t1", actorId: "a1", delta: {} }] }]
+  });
+  const { unused, playerOwned } = out.detail.actors;
+  assert.equal(playerOwned.count, 2, "owned by a player directly, or by everyone through the default level");
+  assert.equal(unused.count, 2, "Strahd and the GM-only character; the wolf has a token");
+  assert.deepEqual(unused.byType.map(t => [t.type, t.count]).sort(), [["character", 1], ["npc", 1]]);
+});

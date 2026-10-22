@@ -342,3 +342,47 @@ test("items repeated on many tokens are named, with their flags, and token names
   assert.ok(html.includes("Items repeated on many tokens: 9000 copies, 40.0 MB"));
 });
 
+
+test("settings of inactive modules, repeated setting entries and actors on no scene become advice", () => {
+  const report = heavyWorldReport();
+  report.env.isGM = true;
+  report.payload = {
+    sections: [{ key: "actors", bytes: 23 * MB, count: 377 }, { key: "settings", bytes: 7 * MB, count: 1326 }], packs: [],
+    detail: {
+      settings: { bytes: 7 * MB, byPackage: [{ key: "autoanimations", bytes: 4.2 * MB, count: 23 }],
+        largest: [{ key: "autoanimations.aaAutorec-ontoken", bytes: 2 * MB, entries: 900, sameLabel: 400, identical: 380 },
+          { key: "beneos-module.beneos-database-local-storage", bytes: 1.9 * MB }],
+        unowned: { bytes: 1.95 * MB, count: 4, packages: [{ key: "beneos-module", bytes: 1.9 * MB, count: 3, state: "missing" },
+          { key: "tiny", bytes: 1000, count: 1, state: "inactive" }] } },
+      actors: { bytes: 23 * MB, largest: [{ name: "Lunet", type: "character", bytes: 1.1 * MB, items: 171 }],
+        playerOwned: { count: 9, bytes: 5 * MB },
+        unused: { count: 300, bytes: 15 * MB, byType: [{ type: "npc", count: 280, bytes: 12 * MB }, { type: "character", count: 20, bytes: 3 * MB }] } }
+    }
+  };
+  report.longFrames.play.packages = [{ key: "module:performance-triage", count: 48, duration: 2834, layout: 28 },
+    { key: "module:midi-qol", count: 9, duration: 900, layout: 100 }];
+  const findings = recommend(report);
+  const unowned = findings.find(f => f.title === "1.9 MB of world settings belong to modules that aren't active");
+  assert.ok(unowned, findings.map(f => f.title).join("\n"));
+  assert.equal(unowned.severity, "medium");
+  assert.match(unowned.detail, /^beneos-module \(not installed\): 1\.9 MB in 3 settings\. /, "tiny groups aren't listed");
+  assert.match(unowned.fix, /getSetting\("<key>"\)\?\.delete\(\), for example with beneos-module\.beneos-database-local-storage\./);
+  const settings = findings.find(f => f.title === "World settings are 7.0 MB");
+  assert.match(settings.detail, /autoanimations\.aaAutorec-ontoken 2\.0 MB \(900 entries, 400 repeat a label\)/);
+  assert.match(settings.fix, /imported more than once/);
+  const actors = findings.find(f => f.title === "World actors are 23.0 MB of the world data");
+  assert.match(actors.detail, /300 actors \(15\.0 MB\) are on no world scene and no player owns them: npc 280 \(12\.0 MB\), character 20 \(3\.0 MB\)\./);
+  assert.match(actors.fix, /keeping IDs/);
+  assert.deepEqual(actors.actions.map(a => a.id), ["openTokenCensus"]);
+  const frames = findings.find(f => f.title === "Modules that started long frames during play");
+  assert.match(frames.detail, /^midi-qol: 900 ms in 9 scripts\. Performance Triage's own 2834 ms is left out/);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("World settings of packages that aren&#39;t active"));
+  assert.ok(html.includes("Actors on no world scene that no player owns: 300 (15.0 MB)"));
+});
+
+test("this module's own long frames alone raise no finding", () => {
+  const report = sampleReport();
+  report.longFrames.play.packages = [{ key: "module:performance-triage", count: 48, duration: 2834, layout: 28 }];
+  assert.ok(!recommend(report).some(f => f.title === "Modules that started long frames during play"));
+});

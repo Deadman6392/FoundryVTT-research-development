@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.8.0
+
+From the report after clearing tokens off the maps (12 tokens left, world data 42 MB, actors over half of it):
+
+- **Actors and tokens** (the planner tab, renamed from Tokens by actor) lists every sidebar actor, including those no
+  world scene uses, with the actor's own size. *On no scene* filters to those, heaviest first; opening one shows its
+  folder and the journal entries and macros linking to it, which break while it is in a compendium.
+- **Actors on no scene**: with the hook profiler on, the report counts actors no token on a world scene uses and no
+  player owns, by type, and the actor finding says how to move them to a compendium keeping IDs.
+- **Settings of inactive modules**: world settings whose package is disabled or not installed are listed with their
+  size, since Foundry still sends them to every client, with a macro to delete one.
+- **Large list settings**: the largest settings show how many entries they hold and how many repeat another entry's
+  label or content.
+- Long frames from this module's own measurements (timing actors) no longer appear in the finding about modules
+  that started long frames during play; the table still shows them.
+
 ## 0.7.0
 
 - **Tokens by actor**: a second tab in the scene planner (renamed from scene archive planner) counts every token on

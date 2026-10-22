@@ -6,13 +6,13 @@ import { telemetry } from "./telemetry.mjs";
 import { planScenes } from "./lib/scene-plan.mjs";
 import { censusTokens } from "./lib/token-census.mjs";
 
-/** Scene folder id -> "Parent / Child" path, so nested folders with the same name can be told apart. */
-function folderPaths() {
+/** Folder id -> "Parent / Child" path, so nested folders with the same name can be told apart. */
+function folderPaths(type = "Scene") {
   const all = new Map();
   for ( const f of game.folders ) all.set(f.id, f);
   const paths = new Map();
   for ( const f of all.values() ) {
-    if ( f.type !== "Scene" ) continue;
+    if ( f.type !== type ) continue;
     const names = [];
     const seen = new Set();
     for ( let cur = f; cur && !seen.has(cur.id); cur = all.get(cur._source?.folder) ) {
@@ -89,14 +89,27 @@ export async function collectScenePlan() {
   });
 }
 
-/** Tokens on every world scene, grouped by the sidebar actor they were placed from. */
+/**
+ * Every sidebar actor with the tokens placed from it on world scenes. Sizing each actor's source data takes about
+ * as long as the world's actor section is large (tens of milliseconds for 24 MB).
+ */
 export function collectTokenCensus() {
+  const actorFolders = folderPaths("Actor");
   const actors = new Map();
-  for ( const a of game.actors ) actors.set(a.id, { name: a.name, type: a.type, player: a.hasPlayerOwner });
+  for ( const a of game.actors ) {
+    let bytes = 0;
+    try {
+      bytes = JSON.stringify(a._source).length;
+    } catch {}
+    actors.set(a.id, { name: a.name, type: a.type, player: a.hasPlayerOwner, bytes,
+      folder: actorFolders.get(a._source?.folder) ?? "" });
+  }
   return censusTokens({
     scenes: game.scenes.map(s => s._source),
     actors,
     folders: folderPaths(),
-    inUse: scenesInUse()
+    inUse: scenesInUse(),
+    journals: game.journal.map(j => j._source),
+    macros: game.macros.map(m => m._source)
   });
 }

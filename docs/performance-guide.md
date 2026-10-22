@@ -87,8 +87,15 @@ What helps, roughly in order of effort:
   back with them: the planner marks maps players have explored, so archive areas the party hasn't been to first, or
   accept that they'll be unexplored again. Once areas are archived, the planner's *In compendiums* section lists them and the teleport regions or tile
   triggers in the world that lead into them, so you know which exits need the area brought back first.
-- **Check large world settings.** The report lists the largest ones. A module storing a big menu or cache in a world
-  setting costs every client on every load; its own options or its author can tell you whether it can be trimmed.
+- **Check large world settings.** The report lists the largest ones, with how many entries a list setting holds and
+  how many repeat another entry's label (a menu imported twice looks like that). A module storing a big menu or
+  cache in a world setting costs every client on every load; its own options or its author can tell you whether it
+  can be trimmed. Export a backup from the module's own menu before removing anything.
+- **Remove settings of modules you've dropped.** Foundry keeps a module's world settings after the module is
+  disabled or uninstalled, and still sends them to every client. The report lists them as settings of packages
+  that aren't active. If you won't turn the module back on, a GM can delete one with a script macro:
+  `await game.settings.storage.get("world").getSetting("<key>")?.delete()`, with the key from the *Largest world
+  settings* table. A module can store settings under a name other than its id, so check the module list first.
 - **Look at items repeated on many tokens.** The report lists items with the same name and size on at least five
   tokens that the sidebar actor doesn't have, with the module flags they carry. In the world above they were generic
   actions (Dash, Shove, Hide, Stabilize...) that a module adds to every token when it's placed, which is why one
@@ -97,14 +104,19 @@ What helps, roughly in order of effort:
 - **Don't replace tokens to save space unless you've checked.** A token placed fresh from the sidebar actor carries
   no copies, but when the report says most copies are items the sidebar actor doesn't have, a fresh token would be
   missing them. Archiving the scene is the safe way to take those tokens out of the load.
-- **Find leftover and repeated tokens.** The planner's *Tokens by actor* tab counts every token by the sidebar
+- **Find leftover and repeated tokens.** The planner's *Actors and tokens* tab counts every token by the sidebar
   actor it was placed from and lists the scenes each actor's tokens are on, with a button per token that takes you
   to it. It shows an adventure that placed dozens of one creature, player characters left on old maps (linked
   copies cost little at load but turn up when the party returns), and unlinked copies of a character, which store
-  the character's items and don't share its sheet. Sort by size to see which actor's tokens weigh the most.
-- **Be careful moving NPCs out of the sidebar.** Every world actor is sent to and prepared by every client, but an
-  unlinked token needs its sidebar actor to exist, including tokens on archived scenes that you may bring back. Only
-  move actors no scene uses, and keep IDs if you do.
+  the character's items and don't share its sheet. Sort by token data to see which actor's tokens weigh the most.
+- **Move actors no scene uses to a compendium.** Every world actor is sent to every client and prepared on it at
+  load (2.7 s for 377 actors on the GM's desktop in the world below, more on a weaker machine). Once the tokens are
+  gone, most sidebar NPCs are only there to be dragged out later. *Actors and tokens* with *On no scene* ticked lists
+  them, heaviest first, with the journal entries and macros that link to each. Put the ones you won't need soon in a
+  folder, right-click it, *Export to Compendium* with the option to keep IDs, and delete them from the world. Bring
+  them back with the compendium's *Import All*, keeping IDs, so tokens on archived scenes and journal links find
+  them again; dragging a single actor out can give it a new ID, and a token whose actor has a different ID has no
+  sheet. Tokens on archived scenes aren't checked, so bring an area's actors back before the area.
 
 ### What archiving one area did
 
@@ -125,7 +137,9 @@ most of the build is world actors and the other documents. And Sequencer's freez
 check reads every token's actor on every scene, on the GM only.
 
 Later, removing the adventure's original copies of maps the GM had rebuilt (89 to 61 scenes, 751 to 304 tokens)
-took the world data from 98.6 to 69.9 MB and Sequencer's ready handler from 9.3 to 3.0 s.
+took the world data from 98.6 to 69.9 MB and Sequencer's ready handler from 9.3 to 3.0 s. Clearing the remaining
+tokens off the maps (61 to 43 scenes, 304 to 12 tokens) took it to 42 MB, all ready handlers to 1.0 s and the time
+until usable to 20 s, from 46 to 48 s before any of this. Actors were then over half of what was left.
 
 The report's *Load history on this computer* table keeps the last 20 loads, so each player can see the same
 before-and-after for their own machine without anyone writing it down.

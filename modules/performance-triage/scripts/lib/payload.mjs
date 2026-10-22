@@ -223,51 +223,160 @@ function sceneBreakdown(scenes, actorsById) {
   };
 }
 
-/** Size world settings grouped by the package that owns them (the part of the key before the first dot). */
-function settingsBreakdown(settings) {
+/**
+ * How many entries a large setting holds, and how many repeat an earlier entry's label or name or all of its
+ * content. A menu that was imported twice shows up as many repeats. Settings are stored as JSON strings.
+ */
+function entryStats(value) {
+  let parsed = value;
+  try {
+    if ( typeof value === "string" ) parsed = JSON.parse(value);
+  } catch {
+    return {};
+  }
+  if ( !parsed || (typeof parsed !== "object") ) return {};
+  const list = Array.isArray(parsed) ? parsed : Object.values(parsed);
+  const labels = new Set();
+  const contents = new Set();
+  let sameLabel = 0;
+  let identical = 0;
+  for ( const entry of list ) {
+    const label = (entry && (typeof entry === "object")) ? (entry.label ?? entry.name) : undefined;
+    if ( typeof label === "string" ) {
+      if ( labels.has(label) ) sameLabel++;
+      else labels.add(label);
+    }
+    const json = safeJson(entry);
+    if ( contents.has(json) ) identical++;
+    else contents.add(json);
+  }
+  return { entries: list.length, sameLabel, identical };
+}
+
+/**
+ * Size world settings grouped by the package that owns them (the part of the key before the first dot). Settings
+ * stay in the world after their module is disabled or uninstalled and are still sent to every client, so groups are
+ * marked when no active package owns them.
+ * @param {object[]} settings
+ * @param {Map<string, "active"|"inactive">|null} packages  Installed packages by id, or null if unknown
+ */
+function settingsBreakdown(settings, packages) {
   const groups = new Map();
   const top = new TopN(10, s => s.bytes);
   let bytes = 0;
   for ( const s of settings ) {
     const size = safeSize(s);
     bytes += size;
-    top.add({ key: String(s?.key ?? ""), bytes: size });
+    top.add({ key: String(s?.key ?? ""), bytes: size, setting: s });
     const ns = String(s?.key ?? "").split(".")[0] || "unknown";
     const g = groups.get(ns) ?? { key: ns, bytes: 0, count: 0 };
     g.bytes += size;
     g.count++;
     groups.set(ns, g);
   }
-  return { bytes, byPackage: [...groups.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10), largest: top.items };
+  const unowned = packages ? [...groups.values()]
+    .filter(g => packages.get(g.key) !== "active")
+    .map(g => ({ ...g, state: packages.has(g.key) ? "inactive" : "missing" }))
+    .sort((a, b) => b.bytes - a.bytes) : null;
+  return {
+    bytes,
+    byPackage: [...groups.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10),
+    largest: top.items.map(({ setting, ...x }) => ({ ...x, ...entryStats(setting?.value) })),
+    unowned: unowned && {
+      bytes: unowned.reduce((a, g) => a + g.bytes, 0),
+      count: unowned.reduce((a, g) => a + g.count, 0),
+      packages: unowned.slice(0, 10)
+    }
+  };
 }
 
-/** Size each world actor; the largest are usually imported NPCs carrying full item descriptions. */
-function actorBreakdown(actors) {
+/** User ids that make an actor player-owned: users below Assistant GM, as Actor#hasPlayerOwner counts them. */
+function playerIds(users) {
+  return new Set((users ?? []).filter(u => (u?.role ?? 0) < 3).map(u => u._id));
+}
+
+function playerOwned(actor, players) {
+  const ownership = actor?.ownership ?? {};
+  for ( const id of players ) if ( (ownership[id] ?? ownership.default ?? 0) >= 3 ) return true;
+  return false;
+}
+
+/**
+ * Size each world actor; the largest are usually player characters or imported NPCs carrying full item
+ * descriptions. Actors that no token on a world scene uses and no player owns are counted separately: they are
+ * the ones a GM can move to a compendium without anything in the world noticing.
+ * @param {object[]} actors
+ * @param {Set<string>} onScenes   Actor ids some token on a world scene uses
+ * @param {Set<string>} players    Ids of non-GM users
+ */
+function actorBreakdown(actors, onScenes, players) {
   const top = new TopN(10, a => a.bytes);
+  const unused = { count: 0, bytes: 0, byType: new Map() };
+  const owned = { count: 0, bytes: 0 };
   let bytes = 0;
   for ( const a of actors ) {
     const size = safeSize(a);
     bytes += size;
     top.add({ name: a?.name ?? "", type: a?.type ?? "", bytes: size, items: a?.items?.length ?? 0 });
+    if ( playerOwned(a, players) ) {
+      owned.count++;
+      owned.bytes += size;
+    } else if ( !onScenes.has(a?._id) ) {
+      unused.count++;
+      unused.bytes += size;
+      const type = a?.type ?? "";
+      const t = unused.byType.get(type) ?? { type, count: 0, bytes: 0 };
+      t.count++;
+      t.bytes += size;
+      unused.byType.set(type, t);
+    }
   }
-  return { bytes, largest: top.items };
+  return {
+    bytes,
+    largest: top.items,
+    playerOwned: owned,
+    unused: { ...unused, byType: [...unused.byType.values()].sort((a, b) => b.bytes - a.bytes) }
+  };
+}
+
+/**
+ * Which packages can own settings, from Foundry's package collections: core, the system, the world and every
+ * installed module with whether it is active.
+ * @param {{modules?: Iterable<{id: string, active: boolean}>, systemId?: string, worldId?: string}} [packages]
+ * @returns {Map<string, "active"|"inactive">|null}
+ */
+function packageStates({ modules, systemId, worldId } = {}) {
+  if ( !modules ) return null;
+  const states = new Map([["core", "active"]]);
+  for ( const m of modules ) if ( m?.id ) states.set(m.id, m.active ? "active" : "inactive");
+  if ( systemId ) states.set(systemId, "active");
+  if ( worldId ) states.set(worldId, "active");
+  return states;
 }
 
 /**
  * Estimate the serialized size of each part of the world payload, with breakdowns of the parts that are usually
  * largest (scenes, actors, settings) and compendium indexes by package.
  * @param {object} data       game.data at init time
+ * @param {object} [packages] Installed modules (game.modules) and the system and world ids, to tell which settings
+ *   belong to a package that is no longer active
  */
-export function measurePayload(data) {
+export function measurePayload(data, packages) {
   const sections = [];
   const packs = new Map();
   const detail = {};
   const actorsById = new Map();
   for ( const a of Array.isArray(data?.actors) ? data.actors : [] ) if ( a?._id ) actorsById.set(a._id, a);
+  const onScenes = new Set();
+  for ( const scene of Array.isArray(data?.scenes) ? data.scenes : [] ) {
+    for ( const t of Array.isArray(scene?.tokens) ? scene.tokens : [] ) if ( t?.actorId ) onScenes.add(t.actorId);
+  }
+  const states = packageStates(packages);
+  const players = playerIds(data?.users);
   const breakdowns = {
     scenes: scenes => sceneBreakdown(scenes, actorsById),
-    settings: settingsBreakdown,
-    actors: actorBreakdown
+    settings: settings => settingsBreakdown(settings, states),
+    actors: actors => actorBreakdown(actors, onScenes, players)
   };
   for ( const [key, value] of Object.entries(data ?? {}) ) {
     if ( breakdowns[key] && Array.isArray(value) ) {
@@ -299,10 +408,14 @@ export function measurePayload(data) {
   };
 }
 
-function safeSize(value) {
+function safeJson(value) {
   try {
-    return JSON.stringify(value)?.length ?? 0;
+    return JSON.stringify(value) ?? "";
   } catch {
-    return 0;
+    return "";
   }
+}
+
+function safeSize(value) {
+  return safeJson(value).length;
 }

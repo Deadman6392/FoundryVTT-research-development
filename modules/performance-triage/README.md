@@ -40,14 +40,17 @@ Maps players have explored are marked, because archiving deletes their explored 
 the scene); the planner asks the server for an index of fog records (scene and user only) when it opens. It reads the world and changes nothing; the
 archiving itself is done with Foundry's own Export to Compendium and Import All, keeping IDs.
 
-*Tokens by actor* counts every token on every world scene by the sidebar actor it was placed from, most tokens first,
-with columns for the number of scenes, the most on one scene and the size the tokens add to the world data. Click a
-column to sort by it, and an actor to list the scenes its tokens are on with each token's name. Each token has a
-button that views its scene (for you only; players stay where they are), selects the token and centres on it, so a
-leftover copy is one click and a Delete away. A filter matches actor, token and scene names, and *Player-owned only*
-narrows it to characters and anything else a player owns; above the table, it lists scenes with more than one token
-of the same player-owned actor and unlinked copies of player-owned actors, which don't share the character sheet.
-Counts update as tokens are created or deleted while the tab is open. Tokens on scenes in compendiums aren't counted.
+*Actors and tokens* lists every sidebar actor with the tokens placed from it on every world scene, most tokens
+first, with columns for the number of scenes, the most on one scene, the size its tokens add to the world data and
+the size of the actor itself. Click a column to sort by it, and an actor to list the scenes its tokens are on with
+each token's name. Each token has a button that views its scene (for you only; players stay where they are),
+selects the token and centres on it, so a leftover copy is one click and a Delete away. A filter matches actor,
+token, folder and scene names; *Player-owned only* narrows it to characters and anything else a player owns, and
+*On no scene* to actors no world scene uses, which are the candidates for an Actor compendium. Opening one of those
+shows its folder and the journal entries and macros that link to it. Above the table it lists scenes with more than
+one token of the same player-owned actor and unlinked copies of player-owned actors, which don't share the
+character sheet. Counts update as tokens are created or deleted while the tab is open. Tokens on scenes in
+compendiums aren't counted, and links from other modules' data (an item pile, a summoning feature) aren't seen.
 
 **Load history** (in the report's timeline): the last 20 loads in this browser, labelled with who logged in, with time until usable, the wait for
 the server, the world build, ready handlers, scene and token counts and the frame rate, so the effect of a change
@@ -110,9 +113,9 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   the profiler is on. That takes a fraction of a second for a 140 MB world on a desktop (about 0.55 s in Node for a
   synthetic 124 MB world) and the report shows how long it took on your computer.
 - Summary sharing: one update to your own User document per session, about a minute after loading.
-- Scene planner, while its *Tokens by actor* tab has been opened and the window is open: a `createToken` and a
-  `deleteToken` listener that recount once a burst of changes settles (about 30 ms for 300 tokens carrying 22 MB of
-  item copies, measured in headless Chromium).
+- Scene planner, while its *Actors and tokens* tab has been opened and the window is open: a `createToken` and a
+  `deleteToken` listener that recount once a burst of changes settles. A count took 20 to 75 ms for 377 actors
+  (23 MB) and about 30 ms for 300 tokens carrying 22 MB of item copies, measured in headless Chromium.
   Both are removed when the window closes. Nothing is listened to otherwise.
 - Load history: one timer a minute after loading, which writes one small entry to this browser's localStorage. It is
   never sent anywhere.
