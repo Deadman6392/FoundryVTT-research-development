@@ -76,7 +76,7 @@
       "ProfilerOff": "The hook profiler will be removed after a reload.",
       "Recording": "Recording a 20 second CPU profile. Keep playing normally.",
       "RecordFailed": "The CPU profile could not be recorded. See the browser console for details.",
-      "MeasuringLayers": "Measuring layer costs for about 30 seconds. The map will flicker; please don't move anything until it finishes.",
+      "MeasuringLayers": "Measuring layer costs for 30 seconds to a minute. The map will flicker; please don't move anything until it finishes.",
       "MeasureFailed": "The layer cost measurement failed. See the browser console for details.",
       "LowProfileSet": "This computer will use the Low profile after a reload. You can change it back under My performance profile in this module's settings.",
       "TrackingOn": "Frame rate during play is now measured on every computer. Play a session, then check this report and Client profiles.",

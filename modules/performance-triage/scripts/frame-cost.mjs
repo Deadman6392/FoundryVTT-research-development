@@ -8,7 +8,7 @@
  */
 import { MODULE_ID } from "./constants.mjs";
 import { telemetry, countFps } from "./telemetry.mjs";
-import { frameCostRows } from "./lib/frames.mjs";
+import { frameCostRows, frameMsSaved } from "./lib/frames.mjs";
 
 const WINDOW_MS = 2500;
 const SETTLE_MS = 500;
@@ -52,6 +52,34 @@ const EXPERIMENTS = [
   { id: "primary", label: "Everything on the map (background, tiles, tokens)", apply: () => hide([canvas.primary]) }
 ];
 
+/**
+ * When a part of the canvas costs at least this much per frame, its own parts are measured too, so the report can
+ * say which knob matters. Below it, the extra seconds aren't worth spending.
+ */
+const BREAKDOWN_MS = 5;
+
+/**
+ * The parts of the costlier experiments. Lighting's four layers are EffectsCanvasGroup members in the v13 and v14
+ * API docs; interface layers are found by CanvasLayer#options.name (v13 docs), and any that aren't there are skipped.
+ */
+const interfaceLayer = name => () => (canvas.interface?.children ?? []).find(c => c?.options?.name === name);
+const PARTS = {
+  effects: [
+    { id: "illumination", label: "Lighting: how brightly lights illuminate the map", object: () => canvas.effects?.illumination },
+    { id: "coloration", label: "Lighting: light colours", object: () => canvas.effects?.coloration },
+    { id: "background", label: "Lighting: changes lights make to the map under them", object: () => canvas.effects?.background },
+    { id: "darkness", label: "Lighting: darkness sources", object: () => canvas.effects?.darkness }
+  ],
+  interface: [
+    { id: "grid", label: "Interface: grid", object: interfaceLayer("grid") },
+    { id: "drawings", label: "Interface: drawings", object: interfaceLayer("drawings") },
+    { id: "templates", label: "Interface: measured templates", object: interfaceLayer("templates") },
+    { id: "regions", label: "Interface: regions", object: interfaceLayer("regions") },
+    { id: "notes", label: "Interface: map notes", object: interfaceLayer("notes") },
+    { id: "tokenInterface", label: "Interface: token bars, names, borders and effect icons", object: interfaceLayer("tokens") }
+  ]
+};
+
 /** Ask Foundry to recompute anything a toggle could have disturbed. */
 function refreshCanvas() {
   try {
@@ -84,16 +112,23 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
   try {
     await wait(settleMs);
     baseline = await countFps(windowMs);
-    for ( const experiment of EXPERIMENTS ) {
+    const measure = async (id, label, apply, parent) => {
       let undo = null;
       try {
-        undo = experiment.apply();
-        if ( !undo ) continue; // Nothing of this kind on the scene
+        undo = apply();
+        if ( !undo ) return; // Nothing of this kind on the scene
         await wait(settleMs);
-        rows.push({ id: experiment.id, label: experiment.label, fps: await countFps(windowMs) });
+        rows.push({ id, label, fps: await countFps(windowMs), ...(parent ? { parent } : {}) });
       } finally {
         undo?.();
       }
+    };
+    for ( const experiment of EXPERIMENTS ) await measure(experiment.id, experiment.label, experiment.apply);
+    // Break down the parts that cost the most, so the report can say which knob to turn
+    for ( const [parent, parts] of Object.entries(PARTS) ) {
+      const row = rows.find(r => r.id === parent);
+      if ( !row || (frameMsSaved(baseline, row.fps) < BREAKDOWN_MS) ) continue;
+      for ( const part of parts ) await measure(part.id, part.label, () => hide([part.object()]), parent);
     }
     await wait(settleMs);
     baselineEnd = await countFps(windowMs);

@@ -160,11 +160,18 @@ who share a summary send their previous session's numbers at their next load, so
 player's slowest scene without anyone exporting anything.
 
 **For a scene that stays slow on a computer:** open it there and run *Measure layer costs* (report, Canvas section)
-to see which part of the drawing costs the most. Then, cheapest to see first:
+to see which part of the drawing costs the most. When lighting or the interface costs 5 ms a frame or more, it
+measures their parts too: illumination, light colours, background changes and darkness; grid, drawings, templates,
+regions, notes and token bars. On the measured world's work PC (Intel HD 4600, Low profile, 30 fps cap), an
+interior with 48 lights, 623 walls and rain drew at 11.6 fps; hiding lighting took it to 28 fps, 50.5 ms of an
+86 ms frame. The rain, at a quarter of its particles on Low, cost 2.9 ms. Then, cheapest to see first:
 
 - **Render scale** (this module's settings, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's
   pixels and stretches it. Nothing is removed, everything is just less sharp, and 75% draws a little over half the
   pixels. It needs a reload, and it is new: try it on one computer before relying on it.
+- **Fewer lights on heavy scenes.** Each light is drawn every frame over the area it lights, on every computer.
+  Clusters of candles or sconces can often be one light; decorative lights players won't miss can go; a light left
+  white skips the colour pass.
 - **Foundry's performance mode** (the Balanced and Low profiles set it): besides Foundry's own quality, FXMaster
   reads it to thin out weather particles, to half on Medium and a quarter on Low, and Dice So Nice lowers its quality
   on Low for players who haven't customized it. FXMaster's filter effects (fog, colour) don't scale.
@@ -174,8 +181,10 @@ to see which part of the drawing costs the most. Then, cheapest to see first:
 - **Minimum** removes things instead: Sequencer effects are hidden (they still load and play, just aren't drawn),
   FXMaster weather is off, and Aura Effects' radius drawings are off on that computer.
 
-**For stutters when tokens move:** the report names the modules whose scripts ran in the long frames after each
-move. What the common ones do, read from their source (versions in brackets):
+**For stutters when tokens move:** the report counts how long frames took beyond the scene's normal frame time after
+each move, and names the modules whose scripts ran in them (drawing the canvas itself is left out). On a computer
+that draws a scene at 12 fps every frame is over the browser's 50 ms long-frame mark, so only time beyond that
+scene's normal pace counts as a stall, and only frames over 2.5 times it count as stutters. What the common ones do, read from their source (versions in brackets):
 
 - **Chris's Premades** (1.5.51) does all its movement work on one GM's computer: the last GM to load, unless
   midi-qol names a preferred GM. Players never pay for it, so a GM laptop that stutters on every move is the

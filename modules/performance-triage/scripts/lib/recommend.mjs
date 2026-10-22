@@ -104,14 +104,14 @@ export function recommend(report) {
   const can = {
     hookProfiler: !report.hookProfilerEnabled && { id: "toggleHookProfiler", label: "Turn on the hook profiler (reloads)" },
     actorTiming: !report.prep && report.world && { id: "benchmarkActors", label: "Time actor preparation" },
-    layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
+    layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (30 to 60 s)" },
     lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
     scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" },
     tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" },
     trackPlay: report.env?.isGM && report.play && !report.play.tracking
       && { id: "enableTrackPlay", label: "Measure frame rate during play" },
     // Unlike layerCosts, offered again after a measurement: it belongs to the scene it was taken on
-    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" }
+    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (30 to 60 s)" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -450,7 +450,8 @@ export function recommend(report) {
       add("low", "Scene", `${cv.scene.videoTiles} video tiles in this scene`,
         "Each playing video decodes every frame on every client.", "Consider the Low or Minimum profile for weak clients.");
     }
-    if ( cv.scene?.animatedLights > 25 ) {
+    // Only while Foundry actually animates lights on this computer (the Low profile turns it off)
+    if ( (cv.scene?.animatedLights > 25) && (report.client?.canvasPerformance?.lightAnimation !== false) ) {
       add("low", "Scene", `${cv.scene.animatedLights} animated lights`,
         "Light animations re-render every frame.", "Clients on the Low profile skip light animation automatically.");
     }
@@ -473,12 +474,18 @@ export function recommend(report) {
   // Layer costs measured on this client
   const fc = report.frameCost;
   if ( fc?.rows?.length ) {
-    const costly = fc.rows.filter(r => r.savedMs >= 5 && (r.id !== "primary")).slice(0, 4);
+    const costly = fc.rows.filter(r => !r.parent && (r.savedMs >= 5) && (r.id !== "primary")).slice(0, 4);
     if ( costly.length ) {
-      add("high", "Scene", `What costs the most to draw on this computer (baseline ${Math.round(fc.baseline)} fps)`,
-        costly.map(r => `${r.label}: ${r.atLimit ? "at least " : ""}${r.savedMs} ms per frame`).join("; ")
-        + (fc.stable ? "." : ". The frame rate drifted during the test, so treat these as rough."),
-        layerAdvice(costly[0].id));
+      const partsOf = r => fc.rows.filter(p => (p.parent === r.id) && (p.savedMs >= 1));
+      const line = r => {
+        const parts = partsOf(r).map(p => `${PART_NAMES[p.id] ?? p.label} ${p.savedMs} ms`);
+        return `${r.label}: ${r.atLimit ? "at least " : ""}${r.savedMs} ms per frame${parts.length ? ` (${parts.join(", ")})` : ""}`;
+      };
+      add("high", "Scene", `What costs the most to draw on this computer (baseline ${Math.round(fc.baseline)} fps on ${fc.scene || "this scene"})`,
+        costly.map(line).join("; ")
+        + (fc.stable ? "." : ". The frame rate drifted during the test, so treat these as rough.")
+        + (costly.some(r => partsOf(r).length) ? " Parts are measured one at a time and can overlap, so they needn't add up." : ""),
+        layerAdvice(costly[0], partsOf(costly[0]), report));
     }
   }
   if ( (env.dpr > 1) && report.client?.resolutionScaling && ((env.memory ?? 8) <= 8) ) {
@@ -501,16 +508,13 @@ export function recommend(report) {
   // Several aura modules each check auras on every token move; one with no auras in the world is pure cost
   const auras = report.auras;
   if ( auras?.length >= 2 ) {
-    const idle = auras.filter(a => !a.sources);
-    add(idle.length ? "medium" : "info", "Play", `${auras.length} aura modules check auras when tokens move`,
-      auras.map(a => `${AURA_MODULES[a.module] ?? a.module}: ${plural(a.sources, "aura")} in this world`
-        + (a.owners.length ? ` (${a.owners.join(", ")})` : "")).join("; ")
-      + ". Each one does its own checks on every move. World actors and tokens on world scenes are counted; "
-      + "compendiums aren't.",
-      idle.length
-        ? `${idle.map(a => a.module).join(" and ")} ${(idle.length === 1) ? "has no auras here but still runs" : "have no auras here but still run"} `
-          + `on every move. Disable ${(idle.length === 1) ? "it" : "them"} if nothing you plan to use relies on ${(idle.length === 1) ? "it" : "them"}.`
-        : "If one module's auras could be rebuilt in another, using one aura module removes the others' work.");
+    add("info", "Play", `${auras.length} aura modules check auras when tokens move`,
+      auras.map(a => `${AURA_MODULES[a.module] ?? a.module}: ${plural(a.sources, "aura")} on actors, tokens and `
+        + "sidebar items" + (a.owners.length ? ` (${a.owners.join(", ")})` : "")).join("; ")
+      + ". Each one does its own checks on every move. Compendiums aren't counted.",
+      "With no auras on a scene, an aura module's work after a move is a pass over that scene's tokens, which is "
+      + "cheap with a few tokens and grows with many; the real cost comes with auras in play, from the wall and "
+      + "distance checks for each one. Using one module per aura (not the same aura in two) keeps that from doubling.");
   }
 
   // Players (GM view)
@@ -535,7 +539,7 @@ export function slowScenes(scenes) {
 }
 
 const sceneText = s => `${s.name}: about ${Math.round(s.fps)} fps (cap ${fpsCap(s)}), lowest tenth about `
-  + `${Math.round(s.low)} fps, ${s.longPerMin} stutters a minute over ${s.minutes} min`;
+  + `${Math.round(s.low)} fps, ${s.stuttersPerMin ?? s.longPerMin} stutters a minute over ${s.minutes} min`;
 
 /** What to try when one package dominates the work after token moves, by package key. */
 const MOVE_ADVICE = {
@@ -594,16 +598,39 @@ function playFindings(report, add, can) {
     const by = mv.packages.slice(0, 4).map(p => `${name(p.key)} ${Math.round((100 * p.ms) / total)}%`).join(", ");
     const top = mv.packages[0]?.key;
     add((mv.medianMs >= 250) ? "high" : "medium", "Play", `Token moves stall this computer for about ${ms(mv.medianMs)} each`,
-      `Over ${plural(mv.count, "move")} during ${when}, frames longer than 50 ms from each move until two seconds `
-      + `after its animation ended added up to a median of ${ms(mv.medianMs)} (worst ${ms(mv.worstMs)}); `
-      + `${mv.stuttered} moves caused one. `
-      + `The canvas drew about ${mv.fps} fps while tokens moved. Script time in those frames by package: ${by}. `
-      + "Shorter frames aren't counted, so this is the stutter players notice, not all the work.",
+      `Over ${plural(mv.count, "move")} during ${when}, frames took a median of ${ms(mv.medianMs)} (worst `
+      + `${ms(mv.worstMs)}) beyond this scene's normal frame time, from each move until two seconds after its `
+      + `animation ended; ${mv.stuttered} moves caused a stutter. The canvas drew about ${mv.fps} fps while tokens `
+      + `moved. Script time in those frames by package, leaving out drawing the canvas itself: ${by}. Frames under `
+      + "50 ms aren't reported by the browser, so this is the stall players notice, not all the work.",
       (MOVE_ADVICE[top] ?? "Check that package's settings for work it does on "
         + "every move (auras, templates, region or movement triggers) that it can limit, for example to combat.")
       + " Run the CPU profile while moving tokens to see the functions involved.");
   }
 }
+
+/** Short names for the parts of a layer in the frame cost breakdown. */
+const PART_NAMES = {
+  illumination: "illumination", coloration: "light colours", background: "background changes", darkness: "darkness",
+  grid: "grid", drawings: "drawings", templates: "templates", regions: "regions", notes: "notes",
+  tokenInterface: "token bars and names"
+};
+
+/** What the costliest part of lighting or the interface points at. */
+const PART_ADVICE = {
+  illumination: "Most of it is illumination, which grows with the number of lights and the screen area they cover.",
+  coloration: "Most of it is light colours: a light with a colour or a colouring effect costs an extra pass where it "
+    + "shines, so decorative lights left white are cheaper.",
+  background: "Most of it is lights changing the map under them (some light animations and techniques do).",
+  darkness: "Most of it is darkness sources.",
+  grid: "Most of it is the grid. Its style and opacity are set per scene.",
+  drawings: "Most of it is drawings; ones with text or a texture fill cost the most.",
+  templates: "Most of it is measured templates, including the shapes Walled Templates computes.",
+  regions: "Most of it is regions' visuals.",
+  notes: "Most of it is map notes.",
+  tokenInterface: "Most of it is token bars, names, borders and effect icons; modules that add to them (health "
+    + "estimates, aura rings, status markers) add to this."
+};
 
 const LAYER_ADVICE = {
   tokenFilters: "Token Magic FX and similar filters redraw every frame. The Low profile stops animated ones; "
@@ -620,8 +647,29 @@ const LAYER_ADVICE = {
     + "and weather effects are the usual ones. Try the Low profile and run this measurement again."
 };
 
-function layerAdvice(id) {
-  return LAYER_ADVICE[id] ?? "";
+/**
+ * Advice for the costliest layer, using its measured parts and what is already set on this computer.
+ * @param {object} row       The frame cost row
+ * @param {object[]} parts   Its measured parts, costliest first
+ * @param {object} report
+ */
+function layerAdvice(row, parts, report) {
+  const top = parts[0] ? (PART_ADVICE[parts[0].id] ?? "") : "";
+  if ( row.id !== "effects" ) return [top, LAYER_ADVICE[row.id] ?? ""].filter(Boolean).join(" ");
+  const lowMode = (report.client?.canvasPerformance?.mode ?? report.client?.performanceMode) === 0;
+  const lights = report.canvas?.scene?.lights;
+  const scaled = (report.client?.renderScale ?? 1) < 1;
+  return [
+    top,
+    lowMode
+      ? "This computer is already at Low performance mode, so Foundry's own quality settings are used up."
+      : "Try the Low profile (which switches to Low performance mode) and measure again.",
+    Number.isFinite(lights) ? `This scene has ${plural(lights, "light")}; each one is drawn every frame over the `
+      + "area it lights, so merging clusters of small lights (candles, sconces) or dropping decorative ones the "
+      + "players won't miss helps every computer." : "",
+    scaled ? "" : "Render scale (this module's settings, per computer) at 75% draws a little over half the pixels, "
+      + "which is what this cost grows with; it needs a reload."
+  ].filter(Boolean).join(" ");
 }
 
 /** One line about a client's previous session, from the play summary it shared, or "" without one. */

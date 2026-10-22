@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.10.0
+
+From the first play measurements, on a work PC (Intel HD 4600) at 12 fps on a 48-light interior:
+
+- **Move stalls and stutters on slow computers**: at 12 fps every frame is over the browser's 50 ms long-frame mark,
+  so 0.9.0 counted every frame after a move as a stall (2.8 s per move). A stall is now the time frames took beyond
+  the scene's normal frame time, a stutter is a frame over 50 ms and 2.5 times that time, and the canvas's own draw
+  callback is left out of the per-module script time. Checked in headless Chromium: a 150 ms burst after a move on
+  a 60 fps scene reads as a 132 ms stall, charged to the module that ran it.
+- **Lighting and interface breakdown**: when lighting or the interface costs 5 ms a frame or more, Measure layer
+  costs also measures their parts (illumination, light colours, background changes, darkness; grid, drawings,
+  templates, regions, notes, token bars), listed under them.
+- **Advice that knows the computer**: the lighting advice says when the computer is already at Low performance mode,
+  names the scene's light count, and suggests render scale when it isn't on. The animated lights finding only appears
+  where Foundry actually animates lights.
+- **Aura modules**: auras on sidebar items count too (custom DAE auras often live there), and the finding no longer
+  suggests disabling an aura module: with no auras in play, their work after a move is a cheap pass over the tokens.
+
 ## 0.9.0
 
 Frame rate during play, after the load-time work:

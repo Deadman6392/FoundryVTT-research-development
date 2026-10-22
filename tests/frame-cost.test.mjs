@@ -22,19 +22,29 @@ Object.assign(canvas, {
   rendered: display(),
   environment: display(),
   primary: display({ filters: smaa }),
-  effects: display(),
+  // Lighting's parts (v13 EffectsCanvasGroup members); background and darkness are absent here and are skipped
+  effects: Object.assign(display(), { illumination: display(), coloration: display() }),
   visibility: display({ visible: false }), // Already hidden (e.g. GM view): must be skipped, not "restored" to visible
-  interface: display()
+  interface: Object.assign(display(), { children: [display({ options: { name: "grid" } })] })
 });
+// The frame time below reads these directly: a later test swaps canvas.effects for a getter that throws
+const lighting = canvas.effects;
+const ui = canvas.interface;
 let perceptionUpdates = 0;
 canvas.perception = { update: () => perceptionUpdates++ };
 
-/** Frame time in ms: 20 ms base, plus 10 for token filters, 5 for tiles, 15 for screen filters. */
+/**
+ * Frame time in ms: 20 ms base, plus 10 for token filters, 5 for tiles, 15 for screen filters, 12 for illumination
+ * and 4 for light colours (lighting is costly enough to break down), and 1 for the grid (the interface isn't).
+ */
 function frameTime() {
   let ms = 20;
   if ( tokens[0].mesh.filters && tokens[0].mesh.visible ) ms += 10;
   if ( tiles[0].mesh.visible ) ms += 5;
   if ( canvas.primary.filters ) ms += 15;
+  if ( lighting.visible && lighting.illumination.visible ) ms += 12;
+  if ( lighting.visible && lighting.coloration.visible ) ms += 4;
+  if ( ui.visible && ui.children[0].visible ) ms += 1;
   if ( !canvas.primary.visible ) ms = 16.7;
   return ms;
 }
@@ -65,12 +75,19 @@ test("measures each layer and restores everything", { timeout: 60_000 }, async (
   const result = await measureFrameCost(FAST);
   const by = Object.fromEntries(result.rows.map(r => [r.id, r]));
 
-  // Baseline 50 ms/frame (20 fps). Timer jitter makes exact numbers impossible, so check the ordering and ranges.
-  assert.ok(result.baseline > 15 && result.baseline < 23, `baseline ${result.baseline}`);
+  // Baseline 67 ms/frame (15 fps). Timer jitter makes exact numbers impossible, so check the ordering and ranges.
+  assert.ok(result.baseline > 11 && result.baseline < 18, `baseline ${result.baseline}`);
   assert.ok(by.screenFilters.savedMs > by.tokenFilters.savedMs, "screen filters (15 ms) cost more than token filters (10 ms)");
   assert.ok(by.tokenFilters.savedMs > by.tiles.savedMs, "token filters (10 ms) cost more than tiles (5 ms)");
   assert.ok(by.tiles.savedMs > 2, `tiles ${by.tiles.savedMs}`);
   assert.equal(by.visibility, undefined, "an already hidden group is skipped");
+  // Lighting cost more than 5 ms, so its parts were measured and listed under it, costliest first
+  const effectsAt = result.rows.findIndex(r => r.id === "effects");
+  assert.deepEqual(result.rows.slice(effectsAt + 1, effectsAt + 3).map(r => [r.id, r.parent]),
+    [["illumination", "effects"], ["coloration", "effects"]]);
+  assert.ok(by.illumination.savedMs > by.coloration.savedMs, "illumination (12 ms) costs more than colours (4 ms)");
+  assert.equal(by.grid, undefined, "the interface cost too little to break down");
+  assert.ok(canvas.effects.illumination.visible && canvas.effects.coloration.visible, "parts are restored");
   assert.equal(result.rows[0].id, "primary");
 
   // Everything is back the way it was

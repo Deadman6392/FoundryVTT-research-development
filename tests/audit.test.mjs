@@ -129,6 +129,8 @@ test("aura definitions are counted across world actors and unlinked tokens when 
   const saved = { actors: game.actors, scenes: game.scenes };
   const paladin = { name: "Paladin", items: [{ flags: { "chris-premades": { macros: { aura: [{}] } } } }], effects: [] };
   game.actors = collection([{ ...actor("Paladin", 1, 0), _source: paladin }]);
+  const savedItems = game.items;
+  game.items = collection([{ _source: { name: "Custom Aura", type: "feat", effects: [{ flags: { ActiveAuras: { isAura: true } } }] } }]);
   game.scenes = collection([{ _source: { tokens: [
     { name: "Cleric", actorLink: false, delta: { effects: [{ type: "auraeffects.aura" }] } },
     { name: "Linked", actorLink: true, delta: { effects: [{ type: "auraeffects.aura" }] } }
@@ -139,7 +141,14 @@ test("aura definitions are counted across world actors and unlinked tokens when 
       { module: "chris-premades", sources: 1, owners: ["Paladin"] },
       { module: "auraeffects", sources: 1, owners: ["Cleric"] }
     ], "a linked token's delta isn't used, so it isn't counted");
+    game.modules.set("ActiveAuras", { id: "ActiveAuras", title: "AA", active: true, version: "0.12.7", compatibility: { verified: "13" },
+      packs: { size: 0 }, esmodules: { size: 1 }, scripts: { size: 0 }, styles: { size: 0 } });
+    const withItems = await collectReport();
+    assert.deepEqual(withItems.auras.find(a => a.module === "ActiveAuras"), { module: "ActiveAuras", sources: 1, owners: ["sidebar items"] },
+      "a custom aura on a sidebar item counts");
   } finally {
+    game.modules.delete("ActiveAuras");
+    game.items = savedItems;
     Object.assign(game, saved);
     for ( const id of ["chris-premades", "auraeffects"] ) game.modules.delete(id);
   }

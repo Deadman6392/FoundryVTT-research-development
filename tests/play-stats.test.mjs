@@ -51,13 +51,38 @@ test("long frames count against the scene and the moves they overlap, by package
   assert.equal(stats.summary().moves, null, "still waiting for late long frame entries");
   stats.closeMoves(10_000 + MOVE_WINDOW_MS + 600);
   const { scenes, moves } = stats.summary();
-  assert.deepEqual([moves.count, moves.medianMs, moves.stuttered, moves.fps], [1, 240, 1, 30]);
+  // No measured stretch yet, so a normal frame is the 60 fps interval: 180 + 60 - 2 x 16.7 ms beyond it
+  assert.deepEqual([moves.count, moves.medianMs, moves.stuttered, moves.fps], [1, 207, 1, 30]);
   assert.deepEqual(moves.packages, [{ key: "module:chris-premades", ms: 160 }, { key: "module:ActiveAuras", ms: 30 }]);
   assert.equal(scenes.length, 0, "no measured stretch on the scene yet");
   stats.addWindow(300, 5000, 60);
   const abbey = stats.summary().scenes[0];
-  assert.deepEqual([abbey.moves, abbey.moveMs], [1, 240]);
-  assert.equal(abbey.longPerMin, 36, "three long frames in five seconds");
+  assert.deepEqual([abbey.moves, abbey.moveMs], [1, 207]);
+  assert.equal(abbey.stuttersPerMin, 36, "three frames over 50 ms in five seconds");
+});
+
+test("on a scene this computer draws slowly, only frames well beyond its normal pace are stalls and stutters", () => {
+  const stats = new PlayStats({ origin: ORIGIN });
+  stats.setScene("s1", "Interior");
+  stats.addWindow(60, 5000, 30); // 12 fps: a normal frame takes 83 ms
+  const move = stats.addMove(20_000, 100);
+  // Every frame is over 50 ms here; most are just this scene's pace
+  for ( let i = 0; i < 10; i++ ) {
+    stats.addLongFrame(frame(20_000 + (i * 85), 85, [["token-hud", 5]]));
+  }
+  // Drawing the canvas is a requestAnimationFrame callback: not work caused by the move
+  const draw = frame(21_000, 90);
+  draw.scripts = [{ sourceURL: `${ORIGIN}/scripts/foundry.mjs`, duration: 80, invoker: "FrameRequestCallback" }];
+  stats.addLongFrame(draw);
+  stats.addLongFrame(frame(21_500, 900, [["chris-premades", 700]]));
+  stats.endMove(move, 22_000, 124);
+  stats.closeMoves(23_000);
+  const { scenes, moves } = stats.summary();
+  assert.ok(moves.medianMs > 810 && moves.medianMs < 900, `about 817 ms beyond the pace, got ${moves.medianMs}`);
+  assert.equal(moves.stuttered, 1);
+  assert.deepEqual(moves.packages.map(p => p.key), ["module:chris-premades", "module:token-hud"],
+    "the canvas draw callback (core, from requestAnimationFrame) isn't charged to the move");
+  assert.equal(scenes[0].stuttersPerMin, 12, "one stutter in five seconds, not twelve long frames");
 });
 
 test("nothing is counted without a scene", () => {

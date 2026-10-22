@@ -19,6 +19,16 @@ export const MOVE_WINDOW_MS = 2000;
 /** Moves that start this close together (a group of tokens moved at once) are one event. */
 const MOVE_GROUP_MS = 250;
 
+/**
+ * A stutter is a frame over 50 ms (the browser's long frame threshold) and this many times the scene's normal frame
+ * time. On a computer that draws a scene at 12 fps every frame is over 50 ms; only the ones well beyond its normal
+ * pace are stutters there.
+ */
+export const STUTTER_FACTOR = 2.5;
+
+/** The canvas draws each frame from a requestAnimationFrame callback; that is drawing, not work caused by a move. */
+const isDrawCallback = sc => (sc.invoker === "FrameRequestCallback");
+
 /** Kept per summary, so a shared copy stays small. */
 const MAX_SCENES = 8;
 const MAX_PACKAGES = 6;
@@ -55,7 +65,7 @@ export class PlayStats {
     this.scenes = new Map();
     this.current = null;
     this.moves = [];   // open move events, waiting for their window to end
-    this.done = [];    // finished move events: {scene, tokens, frames, ms, long, byPackage}
+    this.done = [];    // finished move events: {scene, tokens, fps, long, ms, byPackage}
   }
 
   /** Start counting for a scene; later windows, frames and moves go to it. */
@@ -67,7 +77,7 @@ export class PlayStats {
     let s = this.scenes.get(id);
     if ( !s ) {
       this.scenes.set(id, s = { id, name: name || "(unnamed)", ms: 0, target: 0, hist: new Array(FPS_BUCKETS).fill(0),
-        longFrames: 0, longMs: 0, moves: 0 });
+        frameMs: null, stutters: 0, moves: 0 });
     }
     this.current = s;
   }
@@ -85,6 +95,16 @@ export class PlayStats {
     s.hist[Math.min(FPS_BUCKETS - 1, Math.floor(fps / FPS_BUCKET))]++;
     s.ms += ms;
     s.target = target || s.target;
+    // The scene's normal pace, smoothed so one busy stretch doesn't move it much
+    if ( frames > 0 ) {
+      const frameMs = ms / frames;
+      s.frameMs = (s.frameMs === null) ? frameMs : (0.7 * s.frameMs) + (0.3 * frameMs);
+    }
+  }
+
+  /** How long a frame normally takes on a scene: measured, or the frame cap's interval until it has been. */
+  #normalFrameMs(s) {
+    return s?.frameMs ?? (s?.target ? 1000 / s.target : 1000 / 60);
   }
 
   /**
@@ -114,23 +134,25 @@ export class PlayStats {
   }
 
   /**
-   * A long animation frame (over 50 ms) during play. It counts against the current scene, and against any move whose
-   * window it overlaps: the frame that processed the move starts before the move's hook fires, and a move's window
-   * stays open until the tracker ends it.
+   * A long animation frame (over 50 ms) during play. Only the part beyond the scene's normal frame time counts: on a
+   * computer that already draws a scene slowly, every frame is long, and that is the frame rate, not a stall.
+   * It counts against the current scene, and against any move whose window it overlaps: the frame that processed the
+   * move starts before the move's hook fires, and a move's window stays open until the tracker ends it.
    * @param {PerformanceEntry} e
    */
   addLongFrame(e) {
-    if ( this.current ) {
-      this.current.longFrames++;
-      this.current.longMs += e.duration;
-    }
+    const normal = this.#normalFrameMs(this.current);
+    const stutter = e.duration >= Math.max(50, STUTTER_FACTOR * normal);
+    if ( this.current && stutter ) this.current.stutters++;
+    const extra = Math.max(0, e.duration - normal);
     const start = e.startTime;
     const end = e.startTime + e.duration;
     for ( const m of this.moves ) {
       if ( (end < m.at) || ((m.endAt !== null) && (start > m.endAt)) ) continue;
-      m.long++;
-      m.ms += e.duration;
+      if ( stutter ) m.long++;
+      m.ms += extra;
       for ( const sc of e.scripts ?? [] ) {
+        if ( isDrawCallback(sc) ) continue;
         const url = sc.sourceURL || String(sc.sourceLocation ?? "").replace(/(:\d+){1,2}$/, "");
         const key = packageFromUrl(url, this.origin);
         m.byPackage.set(key, (m.byPackage.get(key) ?? 0) + (sc.duration ?? 0));
@@ -171,7 +193,7 @@ export class PlayStats {
           target: s.target,
           fps: histogramQuantile(s.hist, 0.5),
           low: histogramQuantile(s.hist, 0.1),
-          longPerMin: minutes ? Math.round((s.longFrames / minutes) * 10) / 10 : 0,
+          stuttersPerMin: minutes ? Math.round((s.stutters / minutes) * 10) / 10 : 0,
           moves: moves.length,
           moveMs: moves.length ? Math.round(median(moves.map(m => m.ms))) : null
         };
