@@ -10,7 +10,10 @@ import { packageFromUrl } from "./attribution.mjs";
 export const FPS_BUCKET = 5;
 const FPS_BUCKETS = 26; // 0-5 ... 120-125, 125+
 
-/** A token move's effects (perception, hooks, automation, the movement animation) are counted for this long. */
+/**
+ * A token move's effects (perception, hooks, automation) are counted from the move until this long after its
+ * animation ends: automation modules often wait for the animation before doing their work.
+ */
 export const MOVE_WINDOW_MS = 2000;
 
 /** Moves that start this close together (a group of tokens moved at once) are one event. */
@@ -43,13 +46,11 @@ function median(values) {
 export class PlayStats {
   /**
    * @param {object} [options]
-   * @param {string} [options.origin]        Page origin, for attributing scripts to packages
-   * @param {number} [options.moveWindowMs]  How long after a move its effects are counted
-   * @param {number} [options.graceMs]       Extra wait for long frame entries, which arrive shortly after the frame
+   * @param {string} [options.origin]   Page origin, for attributing scripts to packages
+   * @param {number} [options.graceMs]  Extra wait for long frame entries, which arrive shortly after the frame
    */
-  constructor({ origin, moveWindowMs = MOVE_WINDOW_MS, graceMs = 500 } = {}) {
+  constructor({ origin, graceMs = 500 } = {}) {
     this.origin = origin;
-    this.moveWindowMs = moveWindowMs;
     this.graceMs = graceMs;
     this.scenes = new Map();
     this.current = null;
@@ -106,7 +107,7 @@ export class PlayStats {
     return move;
   }
 
-  /** The move's window is over: note how many frames were drawn during it. */
+  /** The move's window is over (the tracker decides when): note how many frames were drawn during it. */
   endMove(move, at, frames) {
     move.endAt = at;
     move.endFrames = frames;
@@ -114,7 +115,8 @@ export class PlayStats {
 
   /**
    * A long animation frame (over 50 ms) during play. It counts against the current scene, and against any move whose
-   * window it overlaps: the frame that processed the move starts before the move's hook fires.
+   * window it overlaps: the frame that processed the move starts before the move's hook fires, and a move's window
+   * stays open until the tracker ends it.
    * @param {PerformanceEntry} e
    */
   addLongFrame(e) {
@@ -125,7 +127,7 @@ export class PlayStats {
     const start = e.startTime;
     const end = e.startTime + e.duration;
     for ( const m of this.moves ) {
-      if ( (end < m.at) || (start > m.at + this.moveWindowMs) ) continue;
+      if ( (end < m.at) || ((m.endAt !== null) && (start > m.endAt)) ) continue;
       m.long++;
       m.ms += e.duration;
       for ( const sc of e.scripts ?? [] ) {
@@ -143,7 +145,7 @@ export class PlayStats {
   closeMoves(now) {
     const open = [];
     for ( const m of this.moves ) {
-      if ( (m.endAt === null) || (now < m.at + this.moveWindowMs + this.graceMs) ) {
+      if ( (m.endAt === null) || (now < m.endAt + this.graceMs) ) {
         open.push(m);
         continue;
       }

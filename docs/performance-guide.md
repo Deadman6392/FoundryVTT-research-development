@@ -144,6 +144,64 @@ until usable to 20 s, from 46 to 48 s before any of this. Actors were then over 
 The report's *Load history on this computer* table keeps the last 20 loads, so each player can see the same
 before-and-after for their own machine without anyone writing it down.
 
+## Frame rate during play
+
+A heavy table has two different frame rate problems, and they have different fixes.
+
+- **A low frame rate that stays low** on some scenes. That is drawing cost: lights and their soft edges, weather
+  particles, Token Magic FX filters, video tiles and effects, multiplied by the number of pixels on the screen. It
+  is usually the graphics card, and it is different on every player's computer.
+- **Stutters** when something happens: a token moves, an attack rolls, an aura turns on. That is CPU work in a
+  burst, mostly automation modules reacting to the change, plus Foundry recomputing vision and lighting.
+
+Turn on *Measure frame rate during play* in this module's settings (GM), play a session, and every computer keeps
+its frame rate per scene and the work after each token move, by module. Each player's report shows it, and players
+who share a summary send their previous session's numbers at their next load, so *Client profiles* shows each
+player's slowest scene without anyone exporting anything.
+
+**For a scene that stays slow on a computer:** open it there and run *Measure layer costs* (report, Canvas section)
+to see which part of the drawing costs the most. Then, cheapest to see first:
+
+- **Render scale** (this module's settings, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's
+  pixels and stretches it. Nothing is removed, everything is just less sharp, and 75% draws a little over half the
+  pixels. It needs a reload, and it is new: try it on one computer before relying on it.
+- **Foundry's performance mode** (the Balanced and Low profiles set it): besides Foundry's own quality, FXMaster
+  reads it to thin out weather particles, to half on Medium and a quarter on Low, and Dice So Nice lowers its quality
+  on Low for players who haven't customized it. FXMaster's filter effects (fog, colour) don't scale.
+- **The Low profile** freezes animated Token Magic FX filters (they are still drawn), turns off light and vision
+  animation, and draws Sequencer's above-interface effects in the map instead of a second full-window canvas over
+  the interface, which Sequencer's own settings describe as a significant performance hit.
+- **Minimum** removes things instead: Sequencer effects are hidden (they still load and play, just aren't drawn),
+  FXMaster weather is off, and Aura Effects' radius drawings are off on that computer.
+
+**For stutters when tokens move:** the report names the modules whose scripts ran in the long frames after each
+move. What the common ones do, read from their source (versions in brackets):
+
+- **Chris's Premades** (1.5.51) does all its movement work on one GM's computer: the last GM to load, unless
+  midi-qol names a preferred GM. Players never pay for it, so a GM laptop that stutters on every move is the
+  machine to look at. On each leg of a move it measures the distance, with walls, from the moving token to every
+  token on the scene before checking for movement macros. *Movement Event Accuracy* (CPR settings, General) sets
+  how much: Medium does that only for the last leg; Low also drops the wall test from those checks, so a "moves near"
+  effect could trigger through a wall. Auras are checked when a move ends, with walls, at every level, so lowering it
+  keeps them working. Its option to disable the lag warning only hides the warning.
+- **ActiveAuras** (0.12.7) checks auras on the GM's computer on every position update, and rechecks every aura on
+  the scene whenever a wall changes, which includes opening a door. Its combat-only option doesn't stop the movement
+  checks in 0.12.4 to 0.12.7. With *walls block auras* on, a token and aura pair can take up to 50 wall tests per move.
+- **Aura Effects** (1.5.2) checks on the computer of whoever moved the token, often a player's, and redraws aura
+  radii on every computer while tokens move. With Foundry's vision animation off (Low profile) it only redraws auras
+  that appear or disappear; its own *Disable visuals* (per computer) stops the drawing. Auras marked combat-only skip
+  their range checks outside combat.
+- **midi-qol**'s distance checks are the ones CPR uses; its *walls block range* rule decides their cost, and the
+  Levels and cover variants test more than the default. That rule changes how attacks work, not just speed.
+- **Levels**: *exact token visibility* runs 11 sight tests per token instead of 5, and *token elevation scale*
+  refreshes every token on each elevation or selection change.
+
+With more than one aura module active, the report counts the auras each one has in your world. A module with none
+still does its work on every move.
+
+What this can't do: it can't make a module's automation itself cheaper. It shows where the time goes and which of
+that module's own settings change it; past that, the choice is between the feature and the frame rate.
+
 ## The client profiles
 
 Profiles change display settings on one player's computer only. Nothing about the world changes, the player's own
@@ -152,9 +210,9 @@ module settings.
 
 | Profile | For | Changes |
 | --- | --- | --- |
-| Balanced | Mid-range machines that are mostly fine | Medium performance mode, 50 chat messages rendered at startup, 20 fps while idle or unfocused |
-| Low | Integrated graphics, older laptops | Low performance mode, 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, 25 chat messages at startup, 10 fps after 15 s idle |
-| Minimum | Machines that struggle to show the map at all | Low, plus 20 fps cap, no mipmaps, no token drag preview, no chat bubbles or scrolling status text, no Sequencer effects, no FXMaster weather, 15 chat messages at startup, 10 fps after 5 s idle |
+| Balanced | Mid-range machines that are mostly fine | Medium performance mode (FXMaster weather at half its particles), 50 chat messages rendered at startup, 20 fps while idle or unfocused |
+| Low | Integrated graphics, older laptops | Low performance mode (weather at a quarter), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map, 25 chat messages at startup, 10 fps after 15 s idle |
+| Minimum | Machines that struggle to show the map at all | Low, plus 20 fps cap, no mipmaps, no token drag preview, no chat bubbles or scrolling status text, no Sequencer effects, no FXMaster weather, no Aura Effects radius drawings, 15 chat messages at startup, 10 fps after 5 s idle |
 | Theater of the Mind | Machines that cannot draw the map | Turns the game canvas off; sheets, chat and rolls still work |
 
 Third-party settings only apply when that module is active. The **idle throttle** lowers the canvas frame rate when

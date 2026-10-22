@@ -6,6 +6,7 @@ import { MODULE_ID } from "./constants.mjs";
 import { telemetry, rendererInfo, countFps, timelineSnapshot } from "./telemetry.mjs";
 import { readHistory } from "./history.mjs";
 import { previousPlay } from "./play-tracker.mjs";
+import { knownSettingKeys, countAuras, AURA_MODULES } from "./lib/known-settings.mjs";
 import { recommend } from "./lib/recommend.mjs";
 import { PROFILES, valuesEqual, splitSettingKey } from "./lib/profiles.mjs";
 
@@ -70,6 +71,8 @@ export async function collectReport() {
     prep: telemetry.prep,
     frameCost: telemetry.frameCost,
     history: safe(readHistory, []),
+    knownSettings: safe(collectKnownSettings, []),
+    auras: game.user.isGM ? safe(collectAuras) : null,
     play: {
       tracking: !!setting(MODULE_ID, "trackPlay"),
       current: safe(() => telemetry.play?.summary() ?? null),
@@ -81,6 +84,33 @@ export async function collectReport() {
 }
 
 /** Profile settings that no longer hold the profile's value, meaning something else changed them after we did. */
+/** Current values of the settings known to add per-move or per-frame work, for active modules only. */
+function collectKnownSettings() {
+  const out = [];
+  for ( const [module, key] of knownSettingKeys() ) {
+    const pkg = game.modules.get(module);
+    if ( !pkg?.active || !game.settings.settings.has(`${module}.${key}`) ) continue;
+    out.push({ module, key, value: setting(module, key), version: pkg.version });
+  }
+  return out;
+}
+
+/**
+ * Aura definitions per aura module, across world actors and the unlinked tokens on world scenes. Reads source data
+ * only; compendiums are not opened.
+ */
+function collectAuras() {
+  const active = Object.keys(AURA_MODULES).filter(id => game.modules.get(id)?.active);
+  if ( active.length < 2 ) return null;
+  const owners = game.actors.map(a => a._source);
+  for ( const scene of game.scenes ) {
+    for ( const t of scene._source.tokens ?? [] ) if ( !t.actorLink && t.delta ) owners.push({ name: t.name, ...t.delta });
+  }
+  const counts = countAuras(owners);
+  return active.map(id => ({ module: id, sources: counts.get(id)?.sources ?? 0,
+    owners: [...(counts.get(id)?.owners ?? [])].slice(0, 6) }));
+}
+
 function profileDrift(profileId) {
   const drift = [];
   for ( const [key, wanted] of Object.entries(PROFILES[profileId]?.settings ?? {}) ) {

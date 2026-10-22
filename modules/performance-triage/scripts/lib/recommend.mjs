@@ -7,6 +7,7 @@ import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { phasesWithin, worldDataWait } from "./frames.mjs";
 import { SELF_KEY } from "../constants.mjs";
+import { costlySettings, AURA_MODULES } from "./known-settings.mjs";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
 const MB = 1024 * 1024;
@@ -488,6 +489,30 @@ export function recommend(report) {
 
   playFindings(report, add, can);
 
+  // Module settings known to add work on every token move or frame, from each module's source
+  const costly = costlySettings(report.knownSettings ?? []);
+  if ( costly.length ) {
+    const heavy = costly.some(c => ["chris-premades.movementPerformance", "ActiveAuras.wall-block"].includes(`${c.module}.${c.key}`));
+    add(heavy ? "medium" : "low", "Play",
+      `${plural(costly.length, "module setting")} ${(costly.length === 1) ? "adds" : "add"} work on token moves or every frame`,
+      costly.map(c => c.detail).join(" "), costly.map(c => c.fix).join(" "));
+  }
+
+  // Several aura modules each check auras on every token move; one with no auras in the world is pure cost
+  const auras = report.auras;
+  if ( auras?.length >= 2 ) {
+    const idle = auras.filter(a => !a.sources);
+    add(idle.length ? "medium" : "info", "Play", `${auras.length} aura modules check auras when tokens move`,
+      auras.map(a => `${AURA_MODULES[a.module] ?? a.module}: ${plural(a.sources, "aura")} in this world`
+        + (a.owners.length ? ` (${a.owners.join(", ")})` : "")).join("; ")
+      + ". Each one does its own checks on every move. World actors and tokens on world scenes are counted; "
+      + "compendiums aren't.",
+      idle.length
+        ? `${idle.map(a => a.module).join(" and ")} ${(idle.length === 1) ? "has no auras here but still runs" : "have no auras here but still run"} `
+          + `on every move. Disable ${(idle.length === 1) ? "it" : "them"} if nothing you plan to use relies on ${(idle.length === 1) ? "it" : "them"}.`
+        : "If one module's auras could be rebuilt in another, using one aura module removes the others' work.");
+  }
+
   // Players (GM view)
   for ( const p of report.players ?? [] ) {
     const suggestion = suggestProfile(p.summary);
@@ -514,6 +539,23 @@ const sceneText = s => `${s.name}: about ${Math.round(s.fps)} fps (cap ${fpsCap(
 
 /** What to try when one package dominates the work after token moves, by package key. */
 const MOVE_ADVICE = {
+  "module:chris-premades": "Chris's Premades does its movement work on one GM's computer only (the last GM to "
+    + "load, unless midi-qol names a preferred GM), so players don't pay for it. Its Movement Event Accuracy "
+    + "(CPR settings, General) sets how much: Medium checks movement macros only at the end of a move, Low also "
+    + "drops their wall test; auras are checked at the end of a move with walls at every level. Its option to "
+    + "disable the lag warning only hides the warning. CPR's developer tools setting logs each move's timing.",
+  "module:ActiveAuras": "ActiveAuras checks auras on the GM's computer on every position update (each waypoint), and "
+    + "rechecks every aura on the scene when a wall changes, which includes opening and closing doors. In 0.12.4 to "
+    + "0.12.7 its combat-only option doesn't stop the movement checks. If your auras come from another module, "
+    + "disabling ActiveAuras removes this.",
+  "module:auraeffects": "Aura Effects does its checks on the computer of whoever moved the token, often a player's, "
+    + "and redraws aura radii on every computer while tokens move. With Foundry's vision animation off (the Low "
+    + "profile does this) it only redraws auras that appear or disappear, and its Disable visuals setting (per "
+    + "computer, in the Minimum profile) stops the drawing on that computer. Auras marked combat-only skip their "
+    + "range checks outside combat.",
+  "module:midi-qol": "midi-qol's own movement work is small. Its distance checks are the ones Chris's Premades uses, "
+    + "and their cost follows midi's walls block range rule: the Levels and cover variants test more than the "
+    + "default.",
   core: "Foundry's own work after a move is mostly recomputing vision and lighting, which grows with the walls and "
     + "lights near the token and the number of tokens with vision. Fewer vision-giving tokens on the GM's side "
     + "(hide or delete ones not in play) and fewer light sources help."
@@ -552,8 +594,9 @@ function playFindings(report, add, can) {
     const by = mv.packages.slice(0, 4).map(p => `${name(p.key)} ${Math.round((100 * p.ms) / total)}%`).join(", ");
     const top = mv.packages[0]?.key;
     add((mv.medianMs >= 250) ? "high" : "medium", "Play", `Token moves stall this computer for about ${ms(mv.medianMs)} each`,
-      `Over ${plural(mv.count, "move")} during ${when}, frames longer than 50 ms in the two seconds after each move `
-      + `added up to a median of ${ms(mv.medianMs)} (worst ${ms(mv.worstMs)}); ${mv.stuttered} moves caused one. `
+      `Over ${plural(mv.count, "move")} during ${when}, frames longer than 50 ms from each move until two seconds `
+      + `after its animation ended added up to a median of ${ms(mv.medianMs)} (worst ${ms(mv.worstMs)}); `
+      + `${mv.stuttered} moves caused one. `
       + `The canvas drew about ${mv.fps} fps while tokens moved. Script time in those frames by package: ${by}. `
       + "Shorter frames aren't counted, so this is the stutter players notice, not all the work.",
       (MOVE_ADVICE[top] ?? "Check that package's settings for work it does on "

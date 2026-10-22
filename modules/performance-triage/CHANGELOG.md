@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.9.0
+
+Frame rate during play, after the load-time work:
+
+- **Measure frame rate during play** (GM setting, off by default): every computer counts its frame rate per scene in
+  five-second stretches (focused, not idle-throttled), long frames per minute, and the long frames from each token
+  move until two seconds after its animation ends, with their script time by module. The report shows this session
+  and the previous one; the previous session travels with the summary players already share once per session, so
+  Client profiles shows each player's slowest scene, and a slow scene counts toward the suggested profile.
+- **Render scale** (per computer): draws the map at fewer pixels through Foundry's canvasConfig hook. Nothing is
+  removed; it needs a reload and hasn't been tried in a real world yet, so no profile uses it.
+- **Settings that cost on every move**: the report reads module settings known, from their source, to add work on
+  token moves (Chris's Premades' Movement Event Accuracy, ActiveAuras' walls block auras and its combat-only option
+  that doesn't gate movement in 0.12.4 to 0.12.7, Levels, midi-qol's walls block range) and says what each costs.
+  With several aura modules active it counts the auras each has in the world.
+- Token move findings explain where Chris's Premades, ActiveAuras, Aura Effects and midi-qol do their movement work
+  and which of their settings change it.
+- **Profiles**: Low draws Sequencer's above-interface effects in the map instead of a second canvas over the
+  interface; Minimum also turns off Aura Effects' radius drawings. Profile descriptions say that Balanced and Low
+  thin FXMaster weather (through Foundry's performance mode) instead of removing it.
+
 ## 0.8.0
 
 From the report after clearing tokens off the maps (12 tokens left, world data 42 MB, actors over half of it):

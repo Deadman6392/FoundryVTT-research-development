@@ -45,8 +45,8 @@ test("long frames count against the scene and the moves they overlap, by package
   // The frame that processed the move started just before its hook fired
   stats.addLongFrame(frame(9_950, 180, [["chris-premades", 120], ["ActiveAuras", 30]]));
   stats.addLongFrame(frame(10_900, 60, [["chris-premades", 40]]));
-  stats.addLongFrame(frame(10_000 + MOVE_WINDOW_MS + 100, 70, [["dice-so-nice", 60]]), "after the window");
   stats.endMove(move, 10_000 + MOVE_WINDOW_MS, 660);
+  stats.addLongFrame(frame(10_000 + MOVE_WINDOW_MS + 100, 70, [["dice-so-nice", 60]]), "after the window");
   stats.closeMoves(10_000 + MOVE_WINDOW_MS + 100);
   assert.equal(stats.summary().moves, null, "still waiting for late long frame entries");
   stats.closeMoves(10_000 + MOVE_WINDOW_MS + 600);

@@ -7,15 +7,15 @@
       },
       "balanced": {
         "Name": "Balanced",
-        "Hint": "Medium canvas quality, fewer chat messages rendered at startup, and a lower frame rate while idle or unfocused. Barely visible on a decent machine."
+        "Hint": "Medium canvas quality (which also halves FXMaster weather particles), fewer chat messages rendered at startup, and a lower frame rate while idle or unfocused. Barely visible on a decent machine."
       },
       "low": {
         "Name": "Low",
-        "Hint": "Low canvas quality, 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, and aggressive idle throttling. For integrated graphics and older laptops."
+        "Hint": "Low canvas quality (FXMaster weather at a quarter of its particles), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map instead of a second canvas, and aggressive idle throttling. For integrated graphics and older laptops."
       },
       "minimum": {
         "Name": "Minimum",
-        "Hint": "Everything in Low, plus a 20 fps cap, no mipmaps, no Sequencer effects, no FXMaster weather, and no cosmetic extras. For machines that struggle to run the map at all."
+        "Hint": "Everything in Low, plus a 20 fps cap, no mipmaps, no Sequencer effects, no FXMaster weather, no Aura Effects radius drawings, and no cosmetic extras. For machines that struggle to run the map at all."
       },
       "nocanvas": {
         "Name": "Theater of the Mind (no map)",

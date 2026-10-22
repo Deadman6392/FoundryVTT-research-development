@@ -14,7 +14,10 @@ const LOW_SETTINGS = {
   "core.pixelRatioResolutionScaling": false,
   "core.lightAnimation": false,
   "core.visionAnimation": false,
-  "tokenmagic.disableAnimations": true
+  "tokenmagic.disableAnimations": true,
+  // Draws Sequencer's above-interface effects in the canvas instead of a second full-window canvas over the UI
+  // (Sequencer's own hint warns of "a significant performance hit"); read in its init hook, so it needs a reload
+  "sequencer.enable-above-ui-screenspace": false
 };
 
 export const PROFILES = {
@@ -49,7 +52,9 @@ export const PROFILES = {
       "core.scrollingStatusText": false,
       "core.animateRollTable": false,
       "sequencer.effectsEnabled": false,
-      "fxmaster.enable": false
+      "fxmaster.enable": false,
+      // Aura radius drawings off on this computer; the auras themselves still apply
+      "auraeffects.disableVisuals": true
     },
     chatBatchSize: 15,
     idle: { fps: 10, delay: 5, onBlur: true }

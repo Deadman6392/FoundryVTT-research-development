@@ -40,15 +40,21 @@ test("frame rate tracking follows the world setting and measures scenes and toke
   const { startPlayTracker, stopPlayTracker, previousPlay } = await import("../modules/performance-triage/scripts/play-tracker.mjs");
   // Short windows so the test runs in about a second; the defaults are 5 s and 2 s
   const stats = startPlayTracker({ isThrottled: () => false, windowMs: 200, moveWindowMs: 300, graceMs: 50 });
+  let finishAnimation;
+  const animation = new Promise(resolve => finishAnimation = resolve);
   assert.equal(telemetry.play, stats);
   assert.equal(typeof telemetry.onPlayFrame, "function", "long frames the browser reports are passed on");
   assert.equal(env.Hooks.events.moveToken?.length, 1);
 
   await wait(450); // one unusable window (just started), then measured ones
-  env.Hooks.callAll("moveToken", { parent: { id: "s1" } }, {}, {}, {});
+  env.Hooks.callAll("moveToken", { parent: { id: "s1" }, object: { movementAnimationPromise: animation } }, {}, {}, {});
   env.Hooks.callAll("moveToken", { parent: { id: "elsewhere" } }, {}, {}, {}); // another scene: not drawn here
+  await wait(500); // the animation is still running, so the move's window is still open
+  // Automation that waited for the animation runs after it: still charged to the move
+  finishAnimation();
   telemetry.onPlayFrame({ startTime: performance.now(), duration: 120,
     scripts: [{ sourceURL: "http://localhost:30000/modules/chris-premades/scripts/main.js", duration: 90 }] });
+  assert.equal(stats.summary().moves, null, "not closed while waiting");
   await wait(600);
 
   const summary = stats.summary();

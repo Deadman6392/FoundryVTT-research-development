@@ -110,3 +110,37 @@ test("benchmarkActors also times unlinked tokens' actors, skipping linked tokens
     game.scenes = previous;
   }
 });
+
+test("known costly settings are read from active modules only, with the module version", async () => {
+  env.settings.register("midi-qol", "ConfigSettings", { scope: "world", default: {} });
+  await game.settings.set("midi-qol", "ConfigSettings", { optionalRules: { wallsBlockRange: "levelsautocover" } });
+  env.settings.register("levels", "exactTokenVisibility", { scope: "world", default: true }); // module not active
+  const report = await collectReport();
+  assert.deepEqual(report.knownSettings.map(s => [s.module, s.key, s.version]), [["midi-qol", "ConfigSettings", "13.0.68"]]);
+  assert.ok(report.findings.some(f => f.title === "1 module setting adds work on token moves or every frame"));
+  assert.equal(report.auras, null, "aura systems are only compared when two or more are active");
+});
+
+test("aura definitions are counted across world actors and unlinked tokens when several aura modules are active", async () => {
+  for ( const id of ["chris-premades", "auraeffects"] ) {
+    game.modules.set(id, { id, title: id, active: true, version: "1", compatibility: { verified: "13" },
+      packs: { size: 0 }, esmodules: { size: 1 }, scripts: { size: 0 }, styles: { size: 0 } });
+  }
+  const saved = { actors: game.actors, scenes: game.scenes };
+  const paladin = { name: "Paladin", items: [{ flags: { "chris-premades": { macros: { aura: [{}] } } } }], effects: [] };
+  game.actors = collection([{ ...actor("Paladin", 1, 0), _source: paladin }]);
+  game.scenes = collection([{ _source: { tokens: [
+    { name: "Cleric", actorLink: false, delta: { effects: [{ type: "auraeffects.aura" }] } },
+    { name: "Linked", actorLink: true, delta: { effects: [{ type: "auraeffects.aura" }] } }
+  ] } }]);
+  try {
+    const report = await collectReport();
+    assert.deepEqual(report.auras, [
+      { module: "chris-premades", sources: 1, owners: ["Paladin"] },
+      { module: "auraeffects", sources: 1, owners: ["Cleric"] }
+    ], "a linked token's delta isn't used, so it isn't counted");
+  } finally {
+    Object.assign(game, saved);
+    for ( const id of ["chris-premades", "auraeffects"] ) game.modules.delete(id);
+  }
+});

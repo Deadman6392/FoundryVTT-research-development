@@ -316,8 +316,8 @@ function sections(report, opts = {}) {
       title: "Frame rate during play",
       intro: play.tracking
         ? "Measured on every computer while the GM has it on: the frame rate in five-second stretches while this "
-          + "window had focus (not while idle-throttled), long frames, and the work in the two seconds after each "
-          + "token move on the scene being viewed."
+          + "window had focus (not while idle-throttled), long frames, and the work from each token move on the scene "
+          + "being viewed until two seconds after its animation ended."
         : "Not being measured. The GM can turn on Measure frame rate during play in this module's settings.",
       tables: t,
       actions: (report.env?.isGM && !play.tracking) ? [["enableTrackPlay", "Measure frame rate during play"]] : []
