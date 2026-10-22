@@ -29,7 +29,8 @@ export class ReportApp extends ApplicationV2 {
       useLowProfile: ReportApp.#onUseLowProfile,
       openProfiles: () => game.modules.get(MODULE_ID).api.openProfiles(),
       openScenePlan: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "plan" }),
-      openTokenCensus: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "tokens" })
+      openTokenCensus: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "tokens" }),
+      enableTrackPlay: ReportApp.#onEnableTrackPlay
     }
   };
 
@@ -72,6 +73,13 @@ export class ReportApp extends ApplicationV2 {
   }
 
   static #onRefresh() {
+    return this.#refresh();
+  }
+
+  static async #onEnableTrackPlay() {
+    if ( !game.user.isGM ) return;
+    await game.settings.set(MODULE_ID, "trackPlay", true);
+    ui.notifications.info(game.i18n.localize("PTRIAGE.Report.TrackingOn"));
     return this.#refresh();
   }
 

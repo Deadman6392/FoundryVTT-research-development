@@ -9,5 +9,6 @@ export const SELF_KEY = `module:${MODULE_ID}`;
  */
 export const STORAGE_KEYS = {
   hookProfiler: `${MODULE_ID}:hookProfiler`,
-  history: `${MODULE_ID}:history`
+  history: `${MODULE_ID}:history`,
+  play: `${MODULE_ID}:play`
 };

@@ -14,7 +14,10 @@ const LOW_SETTINGS = {
   "core.pixelRatioResolutionScaling": false,
   "core.lightAnimation": false,
   "core.visionAnimation": false,
-  "tokenmagic.disableAnimations": true
+  "tokenmagic.disableAnimations": true,
+  // Draws Sequencer's above-interface effects in the canvas instead of a second full-window canvas over the UI
+  // (Sequencer's own hint warns of "a significant performance hit"); read in its init hook, so it needs a reload
+  "sequencer.enable-above-ui-screenspace": false
 };
 
 export const PROFILES = {
@@ -49,7 +52,9 @@ export const PROFILES = {
       "core.scrollingStatusText": false,
       "core.animateRollTable": false,
       "sequencer.effectsEnabled": false,
-      "fxmaster.enable": false
+      "fxmaster.enable": false,
+      // Aura radius drawings off on this computer; the auras themselves still apply
+      "auraeffects.disableVisuals": true
     },
     chatBatchSize: 15,
     idle: { fps: 10, delay: 5, onBlur: true }
@@ -141,7 +146,10 @@ export function valuesEqual(a, b) {
 export function suggestProfile(summary) {
   if ( !summary ) return null;
   const fps = summary.fps;
-  const lowFps = fps && fps.target && (fps.achieved < Math.min(fps.target, 60) * 0.5);
+  // A scene where the previous session's median stayed under half the cap counts as much as a slow first minute
+  const slowScene = (summary.play?.scenes ?? [])
+    .some(s => (s.minutes >= 2) && Number.isFinite(s.fps) && (s.fps < Math.min(s.target || 60, 60) * 0.5));
+  const lowFps = (fps && fps.target && (fps.achieved < Math.min(fps.target, 60) * 0.5)) || slowScene;
   const slowLoad = summary.loadSeconds > 90;
   const weakHardware = ((summary.memory ?? 8) <= 4) || ((summary.cores ?? 8) <= 2) || ((summary.maxTexture ?? 16384) <= 4096);
   if ( lowFps && weakHardware ) return "minimum";

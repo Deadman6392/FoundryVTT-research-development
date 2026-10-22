@@ -56,6 +56,30 @@ compendiums aren't counted, and links from other modules' data (an item pile, a 
 the server, the world build, ready handlers, scene and token counts and the frame rate, so the effect of a change
 (archiving an area, disabling a module) shows up as numbers.
 
+**Frame rate during play** (GM setting *Measure frame rate during play*, off by default): every computer counts
+the frames it draws in five-second stretches while its window has focus and isn't idle-throttled, per scene, and
+notes the long frames (over 50 ms) from each token move on the scene it is viewing until two seconds after its
+animation ends (automation such as Chris's Premades waits for the animation before doing its work), with the
+script time in them by module. The report shows this session and the previous one; players who share a summary
+send their previous session's numbers with the summary they already send once per session, so *Client profiles*
+shows each player's slowest scene, and a slow scene counts toward the suggested profile. Frames under 50 ms aren't
+attributed to modules (the browser only reports longer ones), so the move numbers are the stutter players notice,
+not all the work a move causes.
+
+**Settings that cost on every move** (report, GM): the current values of module settings known to add work on every
+token move or frame, read from each module's source at a stated version: Chris's Premades' Movement Event Accuracy,
+ActiveAuras' walls block auras (and its combat-only option, which doesn't stop movement checks in 0.12.4 to 0.12.7),
+Levels' exact token visibility and token elevation scale, and midi-qol's walls block range rule. With two or more
+aura modules active (Chris's Premades, ActiveAuras, Aura Effects), it counts the auras each has in the world's actors
+and tokens, since a module with none still checks on every move. The move findings explain where each of those
+modules does its work (Chris's Premades and ActiveAuras on one GM's computer, Aura Effects on the mover's).
+
+**Render scale** (client setting, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's pixels and
+lets the browser stretch it. Everything is still drawn (lights, weather, filters, animations), just less sharply,
+so it is the setting to try when a computer's graphics card is the bottleneck. It doesn't help stutters from
+automation, which are CPU work. It is applied through Foundry's `canvasConfig` hook before the canvas is created, so
+it needs a reload. Not yet included in any profile.
+
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
 one costs on this computer. It takes about 30 seconds, only changes what this client draws while it runs, and puts
@@ -63,8 +87,10 @@ everything back afterwards. This is the tool for "low frame rate while nothing i
 
 **Client profiles** (GM-assigned or self-chosen): Balanced, Low, Minimum and Theater of the Mind. Each changes this
 client's own display settings, lowers the number of chat messages rendered at startup, and lowers the canvas frame
-rate while idle or unfocused. See [the guide](../../docs/performance-guide.md#the-client-profiles) for exactly what
-each one changes.
+rate while idle or unfocused. Balanced and Low lower quality without removing things where modules allow it
+(FXMaster thins weather with Foundry's performance mode; Token Magic FX filters are frozen, not removed; Sequencer's
+above-interface effects move into the map); Minimum removes effects. See
+[the guide](../../docs/performance-guide.md#the-client-profiles) for exactly what each one changes.
 
 ## Install
 
@@ -112,7 +138,12 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   in its own tables. It also measures the world data once, right after init, from a file that is only fetched while
   the profiler is on. That takes a fraction of a second for a 140 MB world on a desktop (about 0.55 s in Node for a
   synthetic 124 MB world) and the report shows how long it took on your computer.
-- Summary sharing: one update to your own User document per session, about a minute after loading.
+- Summary sharing: one update to your own User document per session, about a minute after loading. With frame rate
+  tracking on, it also carries the previous session's per-scene numbers (up to eight scenes, under 1 KB).
+- Frame rate during play, while the GM has it on: one increment per rendered frame, a check every 5 seconds, a
+  `moveToken` listener, a short timer per token move (after its animation), and the long frames the browser already
+  reports. A summary is written to this browser's localStorage when the page is hidden or closed.
+- Render scale: one `canvasConfig` listener, which runs once when the canvas is created.
 - Scene planner, while its *Actors and tokens* tab has been opened and the window is open: a `createToken` and a
   `deleteToken` listener that recount once a burst of changes settles. A count took 20 to 75 ms for 377 actors
   (23 MB) and about 30 ms for 300 tokens carrying 22 MB of item copies, measured in headless Chromium.

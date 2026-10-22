@@ -18,7 +18,10 @@ export const telemetry = {
   fps: null,
   sampler: null,
   prep: null,
-  frameCost: null
+  frameCost: null,
+  // Set while frame rate tracking during play is on
+  play: null,
+  onPlayFrame: null
 };
 
 const PHASES = ["init", "i18nInit", "setup", "canvasInit", "canvasReady", "ready"];
@@ -110,7 +113,10 @@ function observeLongFrames(origin) {
   telemetry.longFrames.supported = observe("long-animation-frame", e => {
     const ready = telemetry.marks.ready;
     if ( (ready === undefined) || (e.startTime <= ready) ) load.add(e, "load");
-    else play.add(e, "play");
+    else {
+      play.add(e, "play");
+      telemetry.onPlayFrame?.(e);
+    }
   });
   telemetry.longFrames.load = load;
   telemetry.longFrames.play = play;

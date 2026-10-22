@@ -7,6 +7,7 @@ import { splitKey } from "./attribution.mjs";
 import { suggestProfile } from "./profiles.mjs";
 import { phasesWithin, worldDataWait } from "./frames.mjs";
 import { SELF_KEY } from "../constants.mjs";
+import { costlySettings, AURA_MODULES } from "./known-settings.mjs";
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3 };
 const MB = 1024 * 1024;
@@ -106,7 +107,11 @@ export function recommend(report) {
     layerCosts: !report.frameCost && report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" },
     lowProfile: (report.profile?.id === "none") && { id: "useLowProfile", label: "Use the Low profile on this computer (reloads)" },
     scenePlan: report.env?.isGM && { id: "openScenePlan", label: "Plan scene archiving" },
-    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" }
+    tokenCensus: report.env?.isGM && { id: "openTokenCensus", label: "Actors and tokens" },
+    trackPlay: report.env?.isGM && report.play && !report.play.tracking
+      && { id: "enableTrackPlay", label: "Measure frame rate during play" },
+    // Unlike layerCosts, offered again after a measurement: it belongs to the scene it was taken on
+    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (about 30 s)" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -482,6 +487,32 @@ export function recommend(report) {
       "The Low profile turns resolution scaling off.");
   }
 
+  playFindings(report, add, can);
+
+  // Module settings known to add work on every token move or frame, from each module's source
+  const costly = costlySettings(report.knownSettings ?? []);
+  if ( costly.length ) {
+    const heavy = costly.some(c => ["chris-premades.movementPerformance", "ActiveAuras.wall-block"].includes(`${c.module}.${c.key}`));
+    add(heavy ? "medium" : "low", "Play",
+      `${plural(costly.length, "module setting")} ${(costly.length === 1) ? "adds" : "add"} work on token moves or every frame`,
+      costly.map(c => c.detail).join(" "), costly.map(c => c.fix).join(" "));
+  }
+
+  // Several aura modules each check auras on every token move; one with no auras in the world is pure cost
+  const auras = report.auras;
+  if ( auras?.length >= 2 ) {
+    const idle = auras.filter(a => !a.sources);
+    add(idle.length ? "medium" : "info", "Play", `${auras.length} aura modules check auras when tokens move`,
+      auras.map(a => `${AURA_MODULES[a.module] ?? a.module}: ${plural(a.sources, "aura")} in this world`
+        + (a.owners.length ? ` (${a.owners.join(", ")})` : "")).join("; ")
+      + ". Each one does its own checks on every move. World actors and tokens on world scenes are counted; "
+      + "compendiums aren't.",
+      idle.length
+        ? `${idle.map(a => a.module).join(" and ")} ${(idle.length === 1) ? "has no auras here but still runs" : "have no auras here but still run"} `
+          + `on every move. Disable ${(idle.length === 1) ? "it" : "them"} if nothing you plan to use relies on ${(idle.length === 1) ? "it" : "them"}.`
+        : "If one module's auras could be rebuilt in another, using one aura module removes the others' work.");
+  }
+
   // Players (GM view)
   for ( const p of report.players ?? [] ) {
     const suggestion = suggestProfile(p.summary);
@@ -493,6 +524,85 @@ export function recommend(report) {
   }
 
   return out.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
+}
+
+/** The frame cap a scene's numbers are judged against; above 60 fps, drops don't matter for a tabletop. */
+const fpsCap = s => Math.min(s.target || 60, 60);
+
+/** Scenes where the median frame rate stayed well under the cap, with at least a minute measured. */
+export function slowScenes(scenes) {
+  return (scenes ?? []).filter(s => (s.minutes >= 1) && Number.isFinite(s.fps) && (s.fps < 0.6 * fpsCap(s)));
+}
+
+const sceneText = s => `${s.name}: about ${Math.round(s.fps)} fps (cap ${fpsCap(s)}), lowest tenth about `
+  + `${Math.round(s.low)} fps, ${s.longPerMin} stutters a minute over ${s.minutes} min`;
+
+/** What to try when one package dominates the work after token moves, by package key. */
+const MOVE_ADVICE = {
+  "module:chris-premades": "Chris's Premades does its movement work on one GM's computer only (the last GM to "
+    + "load, unless midi-qol names a preferred GM), so players don't pay for it. Its Movement Event Accuracy "
+    + "(CPR settings, General) sets how much: Medium checks movement macros only at the end of a move, Low also "
+    + "drops their wall test; auras are checked at the end of a move with walls at every level. Its option to "
+    + "disable the lag warning only hides the warning. CPR's developer tools setting logs each move's timing.",
+  "module:ActiveAuras": "ActiveAuras checks auras on the GM's computer on every position update (each waypoint), and "
+    + "rechecks every aura on the scene when a wall changes, which includes opening and closing doors. In 0.12.4 to "
+    + "0.12.7 its combat-only option doesn't stop the movement checks. If your auras come from another module, "
+    + "disabling ActiveAuras removes this.",
+  "module:auraeffects": "Aura Effects does its checks on the computer of whoever moved the token, often a player's, "
+    + "and redraws aura radii on every computer while tokens move. With Foundry's vision animation off (the Low "
+    + "profile does this) it only redraws auras that appear or disappear, and its Disable visuals setting (per "
+    + "computer, in the Minimum profile) stops the drawing on that computer. Auras marked combat-only skip their "
+    + "range checks outside combat.",
+  "module:midi-qol": "midi-qol's own movement work is small. Its distance checks are the ones Chris's Premades uses, "
+    + "and their cost follows midi's walls block range rule: the Levels and cover variants test more than the "
+    + "default.",
+  core: "Foundry's own work after a move is mostly recomputing vision and lighting, which grows with the walls and "
+    + "lights near the token and the number of tokens with vision. Fewer vision-giving tokens on the GM's side "
+    + "(hide or delete ones not in play) and fewer light sources help."
+};
+
+/** Frame rate during play: slow scenes, the cost of token moves, and how to start measuring. */
+function playFindings(report, add, can) {
+  const play = report.play;
+  if ( !play ) return;
+  const current = play.current?.scenes?.length ? play.current : null;
+  const data = current ?? (play.previous?.scenes?.length ? play.previous : null);
+  const when = current ? "this session" : "the previous session in this browser";
+  if ( !data ) {
+    if ( can.trackPlay ) {
+      add("info", "Play", "Frame rate during play isn't measured yet",
+        "Load times don't show which scenes drop frames once lights, weather, auras and automation are in play. With "
+        + "this on, every computer counts its frame rate per scene and the work after each token move, and players "
+        + "who share a summary send their previous session's numbers to you at their next load.",
+        "Turn it on, play a session, then open this report (and Client profiles for players).", [can.trackPlay]);
+    }
+    return;
+  }
+  const slow = slowScenes(data.scenes);
+  if ( slow.length ) {
+    const worst = Math.min(...slow.map(s => s.fps / fpsCap(s)));
+    add((worst < 0.4) ? "high" : "medium", "Play", `Frame rate dropped on ${plural(slow.length, "scene")} during ${when}`,
+      slow.map(sceneText).join("; ") + ". The lowest tenth is the frame rate this computer fell to in its worst "
+      + "tenth of five-second stretches.",
+      "Open that scene and run Measure layer costs to see which part of the drawing costs the most here. A lower "
+      + "render scale, or the Low profile, makes everything cheaper to draw on this computer without removing it.",
+      [can.measureLayers]);
+  }
+  const mv = data.moves;
+  if ( mv && (mv.count >= 3) && ((mv.medianMs >= 100) || (mv.worstMs >= 500)) ) {
+    const total = mv.packages.reduce((a, p) => a + p.ms, 0) || 1;
+    const by = mv.packages.slice(0, 4).map(p => `${name(p.key)} ${Math.round((100 * p.ms) / total)}%`).join(", ");
+    const top = mv.packages[0]?.key;
+    add((mv.medianMs >= 250) ? "high" : "medium", "Play", `Token moves stall this computer for about ${ms(mv.medianMs)} each`,
+      `Over ${plural(mv.count, "move")} during ${when}, frames longer than 50 ms from each move until two seconds `
+      + `after its animation ended added up to a median of ${ms(mv.medianMs)} (worst ${ms(mv.worstMs)}); `
+      + `${mv.stuttered} moves caused one. `
+      + `The canvas drew about ${mv.fps} fps while tokens moved. Script time in those frames by package: ${by}. `
+      + "Shorter frames aren't counted, so this is the stutter players notice, not all the work.",
+      (MOVE_ADVICE[top] ?? "Check that package's settings for work it does on "
+        + "every move (auras, templates, region or movement triggers) that it can limit, for example to combat.")
+      + " Run the CPU profile while moving tokens to see the functions involved.");
+  }
 }
 
 const LAYER_ADVICE = {
@@ -512,6 +622,17 @@ const LAYER_ADVICE = {
 
 function layerAdvice(id) {
   return LAYER_ADVICE[id] ?? "";
+}
+
+/** One line about a client's previous session, from the play summary it shared, or "" without one. */
+export function describePlay(play) {
+  if ( !play?.scenes?.length ) return "";
+  const scenes = play.scenes.filter(x => (x.minutes >= 1) && Number.isFinite(x.fps));
+  const slowest = scenes.sort((a, b) => (a.fps / fpsCap(a)) - (b.fps / fpsCap(b)))[0];
+  const parts = [];
+  if ( slowest ) parts.push(`slowest scene ${slowest.name}, about ${Math.round(slowest.fps)} of ${fpsCap(slowest)} fps`);
+  if ( play.moves?.count >= 3 ) parts.push(`token moves stall about ${ms(play.moves.medianMs)}`);
+  return parts.length ? `Previous session: ${parts.join("; ")}.` : "";
 }
 
 export function describeSummary(s) {
