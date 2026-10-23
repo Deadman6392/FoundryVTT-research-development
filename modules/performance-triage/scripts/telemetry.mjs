@@ -165,13 +165,22 @@ export function countFps(ms) {
   const ticker = globalThis.canvas?.ready ? canvas.app?.ticker : null;
   if ( typeof ticker?.add !== "function" ) return Promise.resolve(null);
   return new Promise(resolve => {
+    // The rate between the first and last frame counted, not frames per window: a window holds a whole number of
+    // frames, so at 12 fps over 2.5 s one frame more or less would move the result by about 3 ms per frame, as much
+    // as a cheap layer costs
     let frames = 0;
-    const count = () => frames++;
+    let first = 0;
+    let last = 0;
+    const count = () => {
+      last = performance.now();
+      if ( !frames++ ) first = last;
+    };
     const start = performance.now();
     ticker.add(count);
     setTimeout(() => {
       ticker.remove(count);
-      resolve(Math.round((frames * 10000) / (performance.now() - start)) / 10);
+      const fps = (frames > 2) ? ((frames - 1) * 1000) / (last - first) : (frames * 1000) / (performance.now() - start);
+      resolve(Math.round(fps * 10) / 10);
     }, ms);
   });
 }
