@@ -25,7 +25,9 @@ const state = {
   profileId: "none",
   setup: null,
   idle: null,
-  renderScale: 1
+  renderScale: 1,
+  lightingScale: 1,
+  lightingHook: null
 };
 
 /* -------------------------------------------- */
@@ -149,6 +151,17 @@ function registerSettings() {
     // Only read when the canvas is created, once per page load
     requiresReload: true
   });
+  game.settings.register(MODULE_ID, "lightingScale", {
+    name: "PTRIAGE.Settings.LightingScale.Name",
+    hint: "PTRIAGE.Settings.LightingScale.Hint",
+    scope: "client",
+    config: true,
+    type: Number,
+    choices: { 1: "100%", 0.75: "75%", 0.5: "50%" },
+    default: 1,
+    // Applies to the canvas being viewed straight away, and to every scene drawn after it
+    onChange: value => useLightingScale(value)
+  });
   game.settings.register(MODULE_ID, "trackPlay", {
     name: "PTRIAGE.Settings.TrackPlay.Name",
     hint: "PTRIAGE.Settings.TrackPlay.Hint",
@@ -212,6 +225,66 @@ function applyRenderScale(config) {
 }
 
 /* -------------------------------------------- */
+/*  Lighting resolution                         */
+/* -------------------------------------------- */
+
+/**
+ * Lights are drawn per pixel they cover, once per light and layer, every frame, so they cost GPU time in proportion
+ * to resolution even when nothing animates. Their light and colour are smooth gradients, though, and can be drawn at
+ * fewer pixels than the map under them with little visible change.
+ *
+ * The illumination and coloration layers each have a masking filter (their `filter` member in the v13 and v14 API,
+ * "the filter used to mask visual effects on this layer"; the Illumination Buffer module reads the lightmap as that
+ * filter's input). PIXI renders a filtered container into a texture at the filter's resolution and the filter then
+ * composites it over the screen, so lowering the resolution draws every light on the layer at fewer pixels and
+ * stretches the result. The lights already blend into that texture (MAX_COLOR and SCREEN), so blending is unchanged.
+ * If a core version applied the filter some other way, this would change nothing, and Measure layer costs would show
+ * no saving. The background layer is left alone: it redraws the map itself under lights, and would blur it.
+ * Local to this computer, and undone by setting it back to 100%.
+ */
+const LIGHTING_LAYERS = ["illumination", "coloration"];
+
+/** The resolution each layer filter had before this module changed it, so 100% can restore it exactly. */
+const lightingOriginals = new WeakMap();
+
+/**
+ * Draw the lighting layers of the current canvas at a fraction of the canvas resolution.
+ * @param {number} scale  1 restores Foundry's own resolution
+ * @returns {{layer: string, resolution: number}[]}  The layers changed, empty when none could be
+ */
+function setLightingScale(scale) {
+  const effects = globalThis.canvas?.effects;
+  const renderer = globalThis.canvas?.app?.renderer;
+  const out = [];
+  if ( !effects || !renderer ) return out;
+  for ( const layer of LIGHTING_LAYERS ) {
+    const filter = effects[layer]?.filter;
+    if ( !filter || !("resolution" in filter) ) continue;
+    if ( !lightingOriginals.has(filter) ) lightingOriginals.set(filter, filter.resolution);
+    const original = lightingOriginals.get(filter);
+    // A share of what the canvas draws at, never above what Foundry chose. PIXI's own default filter resolution is 1
+    // and null means "the render target's" (FilterSystem#push in PIXI 7.4), so the original can be either.
+    filter.resolution = (scale >= 1) ? original : Math.min(original || renderer.resolution, renderer.resolution * scale);
+    out.push({ layer, resolution: filter.resolution || renderer.resolution });
+  }
+  return out;
+}
+
+/** Apply the setting now and on every scene drawn later; filters are recreated with each canvas draw. */
+function useLightingScale(value) {
+  const scale = Number(value) || 1;
+  state.lightingScale = scale;
+  if ( (scale < 1) && !state.lightingHook ) {
+    state.lightingHook = Hooks.on("canvasReady", () => setLightingScale(state.lightingScale));
+  }
+  if ( globalThis.canvas?.ready ) setLightingScale(scale);
+  if ( (scale >= 1) && state.lightingHook ) {
+    Hooks.off("canvasReady", state.lightingHook);
+    state.lightingHook = null;
+  }
+}
+
+/* -------------------------------------------- */
 /*  Frame rate during play                      */
 /* -------------------------------------------- */
 
@@ -269,6 +342,7 @@ async function shareSummary() {
 Hooks.once("init", () => {
   registerSettings();
   Hooks.once("canvasConfig", applyRenderScale);
+  useLightingScale(game.settings.get(MODULE_ID, "lightingScale"));
   state.profileId = effectiveProfileId();
   const profile = PROFILES[state.profileId];
 
@@ -284,6 +358,8 @@ Hooks.once("init", () => {
     telemetry,
     get profileId() { return state.profileId; },
     get renderScale() { return state.renderScale; },
+    get lightingScale() { return state.lightingScale; },
+    setLightingScale,
     get idle() { return state.idle?.status() ?? null; },
     suspendIdle: suspended => state.idle?.suspend(suspended),
     collectReport: async () => (await import("./audit.mjs")).collectReport(),

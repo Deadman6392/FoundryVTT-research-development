@@ -80,12 +80,31 @@ so it is the setting to try when a computer's graphics card is the bottleneck. I
 automation, which are CPU work. It is applied through Foundry's `canvasConfig` hook before the canvas is created, so
 it needs a reload. Not yet included in any profile.
 
+**Lighting resolution** (client setting, per computer, experimental): draws light and light colours at 75% or 50% of
+the canvas resolution while the map, tokens and interface stay sharp. Foundry draws every light over the area it
+reaches, once per lighting layer, on every frame, so lighting costs in proportion to pixels even when nothing
+animates; a light's glow is a smooth gradient and survives being drawn smaller, though edges at walls get softer. It
+lowers the resolution of the masking filter the illumination and coloration layers already draw through, applies
+straight away and to every scene drawn after, and setting it back to 100% restores Foundry's own values. The
+background layer (lights recolouring the map itself) is left alone, since drawing it smaller would blur the map. In
+headless Chromium with PIXI 7.4.2, 40 overlapping lights in a filtered container drew in 37% of the time at 50%,
+with the picture changing only at light edges. It hasn't run in a Foundry world yet: *Measure layer costs* tries it
+and shows what it saves, and the report shows the resolution the layers actually use.
+
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
 filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
 one costs on this computer. When lighting or the interface costs 5 ms a frame or more, it also measures their parts
 (illumination, light colours, background changes and darkness; grid, drawings, templates, regions, notes and token
-bars). It takes 30 seconds to a minute, only changes what this client draws while it runs, and puts everything back
-afterwards. This is the tool for "low frame rate while nothing is moving".
+bars). For lighting it also hides just the lights while keeping the layers, which splits the cost that grows with
+lights from each layer's fixed work, and tries lighting at half resolution. It takes 30 seconds to a minute, only
+changes what this client draws while it runs, and puts everything back afterwards. This is the tool for "low frame
+rate while nothing is moving".
+
+**Light coverage** (report, Canvas section): how many times over the scene's lights cover its area, how much of it
+they reach and how many overlap there on average, using the shapes Foundry draws them with (walls applied). It lists
+the largest lights with their share of all light area and how many other lights cover the same ground, and the GM can
+select them on the lighting layer to edit. A finding appears when lights cover more than the scene's area or overlap
+two deep.
 
 **Client profiles** (GM-assigned or self-chosen): Balanced, Low, Minimum and Theater of the Mind. Each changes this
 client's own display settings, lowers the number of chat messages rendered at startup, and lowers the canvas frame
@@ -128,7 +147,7 @@ Macro access: `game.modules.get("performance-triage").api` exposes `openReport()
 
 It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
 
-- 9 small files (~48 KB unminified) load at startup, all in one parallel wave. The report, profile manager, scene
+- 9 small files (~56 KB unminified) load at startup, all in one parallel wave. The report, profile manager, scene
   planner, CPU sampler and layer cost measurement are loaded only when opened. No templates or stylesheets are fetched at startup.
 - Always on: two `PerformanceObserver`s that only run when the browser already produced an entry (a file finished
   loading, or a frame took over 50 ms), folded into small aggregates immediately.
@@ -146,6 +165,10 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
   `moveToken` listener, a short timer per token move (after its animation), and the long frames the browser already
   reports. A summary is written to this browser's localStorage when the page is hidden or closed.
 - Render scale: one `canvasConfig` listener, which runs once when the canvas is created.
+- Lighting resolution, while below 100%: one `canvasReady` listener that sets two numbers when a scene is drawn. The
+  lighting itself then costs less; there is no per-frame work.
+- Light coverage, each time the report opens on a drawn scene: about 12,000 point tests against the lights' shapes,
+  about 30 ms in Node for 50 lights with 300-point shapes.
 - Scene planner, while its *Actors and tokens* tab has been opened and the window is open: a `createToken` and a
   `deleteToken` listener that recount once a burst of changes settles. A count took 20 to 75 ms for 377 actors
   (23 MB) and about 30 ms for 300 tokens carrying 22 MB of item copies, measured in headless Chromium.

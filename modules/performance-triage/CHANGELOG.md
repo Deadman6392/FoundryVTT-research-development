@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.11.0
+
+From two work PC reports of the same 48-light interior at full and 75% render scale, where lighting cost 44.8 ms and
+then 25.1 ms per frame, in proportion to the pixels drawn:
+
+- **Lighting resolution** (per computer, experimental, off by default): draws light and light colours at 75% or 50%
+  of the canvas resolution, leaving the map, tokens and interface sharp, by lowering the resolution of the masking
+  filter the illumination and coloration layers already draw through. It applies at once and to every scene drawn
+  after, and 100% restores Foundry's own values. The mechanism was checked in headless Chromium with PIXI 7.4.2
+  (software WebGL, so the times aren't GPU times): 40 overlapping lights blended with SCREEN in a filtered container
+  took 302 ms a frame at full filter resolution, 187 ms at 75% and 112 ms at 50%; the picture changed by 0.24 of 255
+  on average, only at light edges, and a light's centre didn't move. It hasn't run in a Foundry world yet, so the
+  report shows the resolution the layers actually use and Measure layer costs shows what it saves.
+- **Lighting measurements**: when lighting costs 5 ms or more, Measure layer costs also hides just the lights while
+  keeping the layers (the share of lighting that grows with lights), and tries lighting at half resolution.
+- **Light coverage**: the report computes how many times over the scene's lights cover its area, how much they reach
+  and how deep they overlap, from the shapes Foundry draws them with, and lists the largest lights. A finding points
+  at overlap and lights that ignore walls, and the GM can select the largest lights to edit them.
+- **Corrected advice**: the report and guide no longer say an uncoloured light skips the colour pass. Foundry's
+  light API (v13/v14 type definitions) shows nothing that skips that layer for white lights, and it was never
+  measured. The lighting advice now says that Low performance mode doesn't make a still light cheaper to draw.
+
 ## 0.10.0
 
 From the first play measurements, on a work PC (Intel HD 4600) at 12 fps on a 48-light interior:

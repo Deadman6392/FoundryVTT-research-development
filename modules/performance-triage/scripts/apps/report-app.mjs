@@ -30,7 +30,8 @@ export class ReportApp extends ApplicationV2 {
       openProfiles: () => game.modules.get(MODULE_ID).api.openProfiles(),
       openScenePlan: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "plan" }),
       openTokenCensus: () => game.modules.get(MODULE_ID).api.openScenePlan({ tab: "tokens" }),
-      enableTrackPlay: ReportApp.#onEnableTrackPlay
+      enableTrackPlay: ReportApp.#onEnableTrackPlay,
+      selectLargestLights: ReportApp.#onSelectLargestLights
     }
   };
 
@@ -141,6 +142,17 @@ export class ReportApp extends ApplicationV2 {
       rejectClose: false
     });
     if ( reload ) foundry.utils.debouncedReload();
+  }
+
+  /** Select the largest lights the report lists, on the lighting layer, so the GM can see them and edit them. */
+  static async #onSelectLargestLights() {
+    if ( !game.user.isGM || !canvas?.ready ) return;
+    const lights = (this.report?.canvas?.lightCoverage?.largest ?? []).filter(l => l.kind === "light")
+      .map(l => canvas.lighting?.get(l.id)).filter(Boolean);
+    if ( !lights.length ) return ui.notifications.warn(game.i18n.localize("PTRIAGE.Report.LightsGone"));
+    canvas.lighting.activate();
+    lights.forEach((light, i) => light.control({ releaseOthers: i === 0 }));
+    await this.minimize();
   }
 
   static async #onMeasureFrameCost(event, target) {

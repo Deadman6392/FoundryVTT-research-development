@@ -22,8 +22,13 @@ Object.assign(canvas, {
   rendered: display(),
   environment: display(),
   primary: display({ filters: smaa }),
-  // Lighting's parts (v13 EffectsCanvasGroup members); background and darkness are absent here and are skipped
-  effects: Object.assign(display(), { illumination: display(), coloration: display() }),
+  // Lighting's parts (v13 EffectsCanvasGroup members); background and darkness are absent here and are skipped.
+  // Each layer draws through a masking filter; two lights each have a mesh on both layers.
+  effects: Object.assign(display(), {
+    illumination: display({ filter: { resolution: null } }),
+    coloration: display({ filter: { resolution: null } }),
+    lightSources: [0, 1].map(() => ({ layers: { illumination: { mesh: display() }, coloration: { mesh: display() } } }))
+  }),
   visibility: display({ visible: false }), // Already hidden (e.g. GM view): must be skipped, not "restored" to visible
   interface: Object.assign(display(), { children: [display({ options: { name: "grid" } })] })
 });
@@ -35,15 +40,23 @@ canvas.perception = { update: () => perceptionUpdates++ };
 
 /**
  * Frame time in ms: 20 ms base, plus 10 for token filters, 5 for tiles, 15 for screen filters, 12 for illumination
- * and 4 for light colours (lighting is costly enough to break down), and 1 for the grid (the interface isn't).
+ * (4 fixed, 8 per light) and 6 for light colours (2 fixed, 2 per light), and 1 for the grid. Lighting is costly
+ * enough to break down; the interface isn't. A light's cost goes with the pixels its layer draws it at.
  */
+const canvasResolution = 1;
+canvas.app.renderer.resolution = canvasResolution;
+function layerTime(layer, fixed, perLight) {
+  if ( !lighting.visible || !lighting[layer].visible ) return 0;
+  const scale = (lighting[layer].filter.resolution || canvasResolution) / canvasResolution;
+  const lights = lighting.lightSources.filter(s => s.layers[layer].mesh.visible).length;
+  return fixed + (perLight * lights * scale * scale);
+}
 function frameTime() {
   let ms = 20;
   if ( tokens[0].mesh.filters && tokens[0].mesh.visible ) ms += 10;
   if ( tiles[0].mesh.visible ) ms += 5;
   if ( canvas.primary.filters ) ms += 15;
-  if ( lighting.visible && lighting.illumination.visible ) ms += 12;
-  if ( lighting.visible && lighting.coloration.visible ) ms += 4;
+  ms += layerTime("illumination", 4, 8) + layerTime("coloration", 2, 2);
   if ( ui.visible && ui.children[0].visible ) ms += 1;
   if ( !canvas.primary.visible ) ms = 16.7;
   return ms;
@@ -75,7 +88,7 @@ test("measures each layer and restores everything", { timeout: 60_000 }, async (
   const result = await measureFrameCost(FAST);
   const by = Object.fromEntries(result.rows.map(r => [r.id, r]));
 
-  // Baseline 67 ms/frame (15 fps). Timer jitter makes exact numbers impossible, so check the ordering and ranges.
+  // Baseline 77 ms/frame (13 fps). Timer jitter makes exact numbers impossible, so check the ordering and ranges.
   assert.ok(result.baseline > 11 && result.baseline < 18, `baseline ${result.baseline}`);
   assert.ok(by.screenFilters.savedMs > by.tokenFilters.savedMs, "screen filters (15 ms) cost more than token filters (10 ms)");
   assert.ok(by.tokenFilters.savedMs > by.tiles.savedMs, "token filters (10 ms) cost more than tiles (5 ms)");
@@ -83,11 +96,18 @@ test("measures each layer and restores everything", { timeout: 60_000 }, async (
   assert.equal(by.visibility, undefined, "an already hidden group is skipped");
   // Lighting cost more than 5 ms, so its parts were measured and listed under it, costliest first
   const effectsAt = result.rows.findIndex(r => r.id === "effects");
-  assert.deepEqual(result.rows.slice(effectsAt + 1, effectsAt + 3).map(r => [r.id, r.parent]),
-    [["illumination", "effects"], ["coloration", "effects"]]);
-  assert.ok(by.illumination.savedMs > by.coloration.savedMs, "illumination (12 ms) costs more than colours (4 ms)");
+  const parts = result.rows.slice(effectsAt + 1).filter(r => r.parent === "effects");
+  assert.deepEqual(parts.map(r => r.id).sort(), ["coloration", "illumination", "lightMeshes", "lightingHalf"]);
+  assert.ok(by.illumination.savedMs > by.coloration.savedMs, "illumination (20 ms) costs more than colours (6 ms)");
+  // Hiding the lights saves their 20 ms but not the layers' fixed 6 ms; half resolution saves three quarters of 20 ms.
+  // Frame counts are whole numbers, so allow a few ms either way.
+  assert.ok(by.lightMeshes.savedMs > 14 && by.lightMeshes.savedMs < by.effects.savedMs, `lights ${by.lightMeshes.savedMs}`);
+  assert.ok(by.lightingHalf.savedMs > 9 && by.lightingHalf.savedMs < by.effects.savedMs, `half ${by.lightingHalf.savedMs}`);
   assert.equal(by.grid, undefined, "the interface cost too little to break down");
   assert.ok(canvas.effects.illumination.visible && canvas.effects.coloration.visible, "parts are restored");
+  assert.ok(lighting.lightSources.every(s => s.layers.illumination.mesh.visible && s.layers.coloration.mesh.visible));
+  assert.equal(lighting.illumination.filter.resolution, null, "Foundry's own filter resolution is restored");
+  assert.equal(lighting.coloration.filter.resolution, null);
   assert.equal(result.rows[0].id, "primary");
 
   // Everything is back the way it was
@@ -118,4 +138,19 @@ test("restores state even when an experiment throws", async () => {
   assert.equal(tokens[0].mesh.filters, filterA);
   assert.equal(env.ticker.maxFPS, 30);
   assert.deepEqual(suspended.slice(-2), [true, false]);
+});
+
+test("a part Foundry shows again while it is being counted isn't reported", { timeout: 30_000 }, async () => {
+  // Lights whose meshes Foundry re-shows on every refresh: hiding them measures nothing
+  const stubborn = () => ({ get visible() { return true; }, set visible(v) {} });
+  Object.defineProperty(canvas, "effects", { configurable: true, writable: true, value: lighting });
+  const saved = lighting.lightSources;
+  lighting.lightSources = [{ layers: { illumination: { mesh: stubborn() }, coloration: { mesh: stubborn() } } }];
+  try {
+    const result = await measureFrameCost({ windowMs: 400, settleMs: 50 });
+    assert.ok(result.rows.some(r => r.id === "illumination"), "lighting was broken down");
+    assert.ok(!result.rows.some(r => r.id === "lightMeshes"), "no row for a hide that didn't hold");
+  } finally {
+    lighting.lightSources = saved;
+  }
 });

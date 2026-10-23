@@ -111,7 +111,9 @@ export function recommend(report) {
     trackPlay: report.env?.isGM && report.play && !report.play.tracking
       && { id: "enableTrackPlay", label: "Measure frame rate during play" },
     // Unlike layerCosts, offered again after a measurement: it belongs to the scene it was taken on
-    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (30 to 60 s)" }
+    measureLayers: report.canvas?.ready && { id: "measureFrameCost", label: "Measure layer costs (30 to 60 s)" },
+    selectLights: report.env?.isGM && report.canvas?.lightCoverage?.largest?.some(l => l.kind === "light")
+      && { id: "selectLargestLights", label: "Select the largest lights" }
   };
 
   // Debug output left enabled is the cheapest big win there is
@@ -450,6 +452,7 @@ export function recommend(report) {
       add("low", "Scene", `${cv.scene.videoTiles} video tiles in this scene`,
         "Each playing video decodes every frame on every client.", "Consider the Low or Minimum profile for weak clients.");
     }
+    lightCoverageFinding(cv, report, add, can);
     // Only while Foundry actually animates lights on this computer (the Low profile turns it off)
     if ( (cv.scene?.animatedLights > 25) && (report.client?.canvasPerformance?.lightAnimation !== false) ) {
       add("low", "Scene", `${cv.scene.animatedLights} animated lights`,
@@ -476,7 +479,8 @@ export function recommend(report) {
   if ( fc?.rows?.length ) {
     const costly = fc.rows.filter(r => !r.parent && (r.savedMs >= 5) && (r.id !== "primary")).slice(0, 4);
     if ( costly.length ) {
-      const partsOf = r => fc.rows.filter(p => (p.parent === r.id) && (p.savedMs >= 1));
+      // Half-resolution lighting is a change, not a part, so it isn't listed among what lighting is made of
+      const partsOf = r => fc.rows.filter(p => (p.parent === r.id) && (p.savedMs >= 1) && (p.id !== "lightingHalf"));
       const line = r => {
         const parts = partsOf(r).map(p => `${PART_NAMES[p.id] ?? p.label} ${p.savedMs} ms`);
         return `${r.label}: ${r.atLimit ? "at least " : ""}${r.savedMs} ms per frame${parts.length ? ` (${parts.join(", ")})` : ""}`;
@@ -612,15 +616,16 @@ function playFindings(report, add, can) {
 /** Short names for the parts of a layer in the frame cost breakdown. */
 const PART_NAMES = {
   illumination: "illumination", coloration: "light colours", background: "background changes", darkness: "darkness",
+  lightMeshes: "the lights themselves",
   grid: "grid", drawings: "drawings", templates: "templates", regions: "regions", notes: "notes",
   tokenInterface: "token bars and names"
 };
 
 /** What the costliest part of lighting or the interface points at. */
 const PART_ADVICE = {
-  illumination: "Most of it is illumination, which grows with the number of lights and the screen area they cover.",
-  coloration: "Most of it is light colours: a light with a colour or a colouring effect costs an extra pass where it "
-    + "shines, so decorative lights left white are cheaper.",
+  illumination: "Most of it is illumination: how brightly each light lights the map.",
+  coloration: "Most of it is light colours: each light's tint, drawn as a separate pass over the area it reaches.",
+  lightMeshes: "Most of it is the lights themselves: each light is drawn over the area it reaches, once per layer.",
   background: "Most of it is lights changing the map under them (some light animations and techniques do).",
   darkness: "Most of it is darkness sources.",
   grid: "Most of it is the grid. Its style and opacity are set per scene.",
@@ -654,22 +659,84 @@ const LAYER_ADVICE = {
  * @param {object} report
  */
 function layerAdvice(row, parts, report) {
-  const top = parts[0] ? (PART_ADVICE[parts[0].id] ?? "") : "";
+  const layers = parts.filter(p => p.id !== "lightMeshes");
+  const top = layers[0] ? (PART_ADVICE[layers[0].id] ?? "") : "";
   if ( row.id !== "effects" ) return [top, LAYER_ADVICE[row.id] ?? ""].filter(Boolean).join(" ");
-  const lowMode = (report.client?.canvasPerformance?.mode ?? report.client?.performanceMode) === 0;
-  const lights = report.canvas?.scene?.lights;
-  const scaled = (report.client?.renderScale ?? 1) < 1;
+  const cl = report.client ?? {};
+  const lowMode = (cl.canvasPerformance?.mode ?? cl.performanceMode) === 0;
+  const rows = report.frameCost?.rows ?? [];
+  const meshes = rows.find(r => r.id === "lightMeshes");
+  const half = rows.find(r => r.id === "lightingHalf");
+  const lightingScale = cl.lightingScale ?? 1;
   return [
     top,
     lowMode
-      ? "This computer is already at Low performance mode, so Foundry's own quality settings are used up."
+      ? "This computer is already at Low performance mode, which stops light animation but doesn't make a still "
+        + "light any cheaper to draw: every light is drawn again on every frame either way."
       : "Try the Low profile (which switches to Low performance mode) and measure again.",
-    Number.isFinite(lights) ? `This scene has ${plural(lights, "light")}; each one is drawn every frame over the `
-      + "area it lights, so merging clusters of small lights (candles, sconces) or dropping decorative ones the "
-      + "players won't miss helps every computer." : "",
-    scaled ? "" : "Render scale (this module's settings, per computer) at 75% draws a little over half the pixels, "
-      + "which is what this cost grows with; it needs a reload."
+    meshes ? meshDetail(meshes, row) : lightCount(report.canvas?.scene?.lights),
+    halfDetail(half, lightingScale),
+    ((cl.renderScale ?? 1) < 1) ? "" : "Render scale (this module's settings, per computer) at 75% draws a little "
+      + "over half the pixels, which is what this cost grows with; it needs a reload."
   ].filter(Boolean).join(" ");
+}
+
+/** Without the "lights hidden" measurement (taken before 0.11, or lighting was cheap), the scene's light count. */
+function lightCount(lights) {
+  return Number.isFinite(lights) ? `This scene has ${plural(lights, "light")}; each one is drawn every frame over the `
+    + "area it reaches, so merging clusters of small lights (candles, sconces) or dropping decorative ones the players "
+    + "won't miss helps every computer." : "";
+}
+
+/** How much of lighting's cost grows with lights, from the "lights hidden, layers kept" measurement. */
+function meshDetail(meshes, effects) {
+  if ( !(effects.savedMs > 0) ) return "";
+  const share = meshes.savedMs / effects.savedMs;
+  if ( share >= 0.5 ) {
+    return `Hiding just the lights saved ${meshes.savedMs} of the ${effects.savedMs} ms, so it grows with the area `
+      + "lights cover and how many overlap: shorter radii where lights overlap, walls clipping lights, and one light "
+      + "in place of a cluster all help every computer (the scene's light table lists the largest).";
+  }
+  return `Hiding just the lights saved only ${meshes.savedMs} of the ${effects.savedMs} ms; the rest is each lighting `
+    + "layer's fixed work over the whole screen, which fewer lights won't reduce but fewer pixels will.";
+}
+
+/** What drawing lighting at half resolution did in the measurement. */
+function halfDetail(half, lightingScale) {
+  if ( half ) {
+    return (half.savedMs >= 1)
+      ? `Drawing lighting at half resolution saved ${half.savedMs} ms per frame in the test: set Lighting resolution `
+        + "(this module's settings, per computer) to 50% and check that lights still look right to you."
+      : "Drawing lighting at half resolution saved nothing measurable in the test, so Lighting resolution won't help "
+        + "on this computer.";
+  }
+  return (lightingScale < 1) ? ""
+    : "Lighting resolution (this module's settings, per computer) draws lights at fewer pixels than the map; measuring "
+      + "layer costs again shows what it would save.";
+}
+
+/**
+ * Lights covering a scene several times over: each is drawn over the area it reaches, on each lighting layer, every
+ * frame, on every computer that views the scene.
+ */
+function lightCoverageFinding(cv, report, add, can) {
+  const lc = cv.lightCoverage;
+  if ( !lc?.count || ((lc.cover < 1) && (lc.overlap < 2)) ) return;
+  const effects = (report.frameCost?.rows ?? []).find(r => r.id === "effects");
+  const costly = effects && (effects.savedMs >= 10);
+  const big = lc.largest[0];
+  add(costly ? "medium" : "low", "Scene",
+    `Lights on ${cv.scene?.name || "this scene"} cover ${lc.cover} times its area`,
+    `Foundry draws each light over the area it reaches, once per lighting layer, on every frame, so what costs is `
+    + `area and overlap rather than the number of lights. These ${plural(lc.count, "light")} reach `
+    + `${Math.round(lc.lit * 100)}% of the scene, ${lc.overlap} deep on average where they do.`
+    + (big ? ` The largest covers ${Math.round(big.cover * 100)}% of the scene by itself` : "")
+    + (big?.overlap >= 1 ? `, under ${big.overlap} other lights on average.` : (big ? "." : ""))
+    + (lc.unwalled ? ` ${plural(lc.unwalled, "light")} ignore walls, so ${lc.unwalled === 1 ? "it is" : "they are"} drawn `
+      + "through every room in reach." : ""),
+    "You don't need fewer lights so much as less overlap: let each sconce reach about as far as the next one, let "
+    + "walls clip lights unless they should shine through, and use one light for a cluster of candles. Large "
+    + "ambient or scenery lights are usually the cheapest place to start.", [can.selectLights]);
 }
 
 /** One line about a client's previous session, from the play summary it shared, or "" without one. */

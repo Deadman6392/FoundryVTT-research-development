@@ -468,3 +468,64 @@ test("layer cost advice uses the breakdown and what is already set on that compu
   const html = reportToHtml({ ...report, findings });
   assert.ok(html.includes("↳ Lighting: how brightly lights illuminate the map"));
 });
+
+test("lighting advice says how much is the lights themselves, what half resolution saved, and where lights overlap", () => {
+  // Shaped like the work PC's second report: render scale 75%, Low mode, the new lighting rows measured
+  const report = sampleReport();
+  report.profile.id = "low";
+  report.env.isGM = true;
+  report.client = { ...report.client, renderScale: 0.75, lightingScale: 1,
+    lightingResolution: { illumination: 1, coloration: 1 }, canvasPerformance: { mode: 0, fps: 30, lightAnimation: false } };
+  report.canvas = { ready: true, textureMemory: 600 * MB, textures: [],
+    scene: { name: "Interior", lights: 48, animatedLights: 48, walls: 623, videoTiles: 0, gridSize: 204 },
+    lightCoverage: { count: 50, cover: 2.4, lit: 0.62, overlap: 3.1, unwalled: 2, largest: [
+      { id: "L1", kind: "light", name: "", radius: 2040, walls: false, share: 0.31, cover: 0.74, overlap: 2.6 },
+      { id: "T1", kind: "token", name: "Ireena", radius: 408, walls: true, share: 0.04, cover: 0.09, overlap: 1.2 }
+    ] } };
+  report.frameCost = { scene: "Interior", baseline: 22, baselineEnd: 21.6, stable: true, rows: [
+    { id: "effects", label: "Lighting and vision effects", fps: 49.2, savedMs: 25.1 },
+    { id: "coloration", label: "Lighting: light colours", fps: 30, savedMs: 12.1, parent: "effects" },
+    { id: "lightMeshes", label: "Lighting: the lights themselves", fps: 40, savedMs: 20.5, parent: "effects" },
+    { id: "lightingHalf", label: "Lighting drawn at half resolution", fps: 35, savedMs: 16.9, parent: "effects" },
+    { id: "illumination", label: "Lighting: how brightly lights illuminate the map", fps: 26.4, savedMs: 7.6, parent: "effects" }
+  ] };
+  const findings = recommend(report);
+  const layers = findings.find(f => f.title.startsWith("What costs the most to draw"));
+  assert.match(layers.detail, /\(light colours 12\.1 ms, the lights themselves 20\.5 ms, illumination 7\.6 ms\)/,
+    "half resolution is a change, not a part of lighting");
+  assert.match(layers.fix, /^Most of it is light colours/, "the costliest layer, not the lights-hidden row");
+  assert.match(layers.fix, /doesn't make a still light any cheaper/);
+  assert.match(layers.fix, /Hiding just the lights saved 20\.5 of the 25\.1 ms/);
+  assert.match(layers.fix, /half resolution saved 16\.9 ms per frame/);
+  assert.ok(!/Render scale/.test(layers.fix), "already scaled");
+  assert.ok(!/white/.test(layers.fix), "no unmeasured claim about uncoloured lights");
+
+  const coverage = findings.find(f => f.title === "Lights on Interior cover 2.4 times its area");
+  assert.equal(coverage.severity, "medium", "lighting measured costly here");
+  assert.match(coverage.detail, /50 lights reach 62% of the scene, 3\.1 deep/);
+  assert.match(coverage.detail, /largest covers 74% of the scene by itself, under 2\.6 other lights/);
+  assert.match(coverage.detail, /2 lights ignore walls, so they are drawn through every room/);
+  assert.deepEqual(coverage.actions.map(a => a.id), ["selectLargestLights"]);
+
+  // The lights only half the cost, and half resolution didn't help: say so
+  report.frameCost.rows[2].savedMs = 6;
+  report.frameCost.rows[3].savedMs = 0.4;
+  const fix = recommend(report).find(f => f.title.startsWith("What costs the most to draw")).fix;
+  assert.match(fix, /saved only 6 of the 25\.1 ms; the rest is each lighting layer's fixed work/);
+  assert.match(fix, /saved nothing measurable/);
+
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("Lights on this scene: 50 drawn, covering 2.4x the scene&#39;s area")
+    || html.includes("Lights on this scene: 50 drawn, covering 2.4x the scene's area"));
+  assert.ok(html.includes("<td>10 grid</td><td>ignored</td><td>31%</td><td>2.6</td>"), "radius in grid squares");
+  assert.ok(html.includes("<td>Token: Ireena</td>"));
+  assert.ok(html.includes('data-action="selectLargestLights"'));
+  assert.ok(html.includes("Lighting resolution</td><td>100% (illumination 100%, light colours 100% of the canvas)"));
+
+  // Few, separate lights raise nothing; players get no select button
+  report.canvas.lightCoverage = { ...report.canvas.lightCoverage, cover: 0.4, overlap: 1.1 };
+  report.env.isGM = false;
+  const quiet = recommend(report);
+  assert.ok(!quiet.some(f => f.title.startsWith("Lights on Interior")));
+  assert.ok(!reportToHtml({ ...report, findings: quiet }).includes("selectLargestLights"));
+});
