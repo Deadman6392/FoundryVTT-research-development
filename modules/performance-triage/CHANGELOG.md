@@ -18,6 +18,10 @@ then 25.1 ms per frame, in proportion to the pixels drawn:
 - **Light coverage**: the report computes how many times over the scene's lights cover its area, how much they reach
   and how deep they overlap, from the shapes Foundry draws them with, and lists the largest lights. A finding points
   at overlap and lights that ignore walls, and the GM can select the largest lights to edit them.
+- **Steadier frame counts**: layer costs and the frame rate shown when the report opens are now the rate between
+  the first and last frame counted, not whole frames per window. At 12 fps a 2.5 s window holds about 30 frames, so
+  one frame more or less moved a reading by about 3 ms, as much as a cheap layer costs (tiles measured 2.9 ms on the
+  work PC).
 - **Corrected advice**: the report and guide no longer say an uncoloured light skips the colour pass. Foundry's
   light API (v13/v14 type definitions) shows nothing that skips that layer for white lights, and it was never
   measured. The lighting advice now says that Low performance mode doesn't make a still light cheaper to draw.
