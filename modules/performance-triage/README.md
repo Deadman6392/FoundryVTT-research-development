@@ -80,25 +80,34 @@ so it is the setting to try when a computer's graphics card is the bottleneck. I
 automation, which are CPU work. It is applied through Foundry's `canvasConfig` hook before the canvas is created, so
 it needs a reload. Not yet included in any profile.
 
-**Lighting resolution** (client setting, per computer, experimental): draws light and light colours at 75% or 50% of
-the canvas resolution while the map, tokens and interface stay sharp. Foundry draws every light over the area it
-reaches, once per lighting layer, on every frame, so lighting costs in proportion to pixels even when nothing
-animates; a light's glow is a smooth gradient and survives being drawn smaller, though edges at walls get softer. It
-lowers the resolution of the masking filter the illumination and coloration layers already draw through, applies
-straight away and to every scene drawn after, and setting it back to 100% restores Foundry's own values. The
-background layer (lights recolouring the map itself) is left alone, since drawing it smaller would blur the map. In
-headless Chromium with PIXI 7.4.2, 40 overlapping lights in a filtered container drew in 37% of the time at 50%,
-with the picture changing only at light edges. It hasn't run in a Foundry world yet: *Measure layer costs* tries it
-and shows what it saves, and the report shows the resolution the layers actually use.
+**Lighting resolution** (client setting, per computer): draws light and light colours at 75% or 50% of the canvas
+resolution while the map, tokens and interface stay sharp, or picks the step automatically. Foundry draws every light
+over the area it reaches, once per lighting layer, on every frame, so lighting costs in proportion to pixels even when
+nothing animates; a light's glow is a smooth gradient and survives being drawn smaller, though edges at walls get
+softer. It lowers the resolution of the masking filter the illumination and coloration layers already draw through,
+applies straight away and to every scene drawn after, and 100% restores Foundry's own values. The background layer
+(lights recolouring the map itself) is left alone, since drawing it smaller would blur the map. In headless Chromium
+with PIXI 7.4.2, 40 overlapping lights in a filtered container drew in 37% of the time at 50%, with the picture
+changing only at light edges; in a Foundry 13.351 world the report confirmed both layers took the lower resolution.
 
-**Layer costs** (button in the report's Canvas section): hides each part of the canvas for a few seconds (token
-filters, tokens, tiles, lighting, fog and vision, interface, full-screen filters) and measures how much frame time each
-one costs on this computer. When lighting or the interface costs 5 ms a frame or more, it also measures their parts
-(illumination, light colours, background changes and darkness; grid, drawings, templates, regions, notes and token
-bars). For lighting it also hides just the lights while keeping the layers, which splits the cost that grows with
-lights from each layer's fixed work, and tries lighting at half resolution. It takes 30 seconds to a minute, only
-changes what this client draws while it runs, and puts everything back afterwards. This is the tool for "low frame
-rate while nothing is moving".
+*Automatic* is for the computer nobody will tune mid-session: it keeps full resolution until this computer falls
+below 80% of its frame cap on a scene for two 3-second checks in a row, then lowers lighting a step. It keeps the step
+only if the frame rate rose by 8% or more (when it doesn't, lighting wasn't the bottleneck and it goes back), tries
+the sharper step again after the frame rate has held near the cap and ten minutes have passed, and remembers each
+scene's step for the session. It pauses while the idle throttle is lowering the frame rate, while the tab is hidden,
+and while a measurement runs, and says once per session when it first lowers lighting.
+
+**Layer costs** (button in the report's Canvas section): hides each part of the canvas in turn (token filters, tokens,
+tiles, lighting, fog and vision, interface, full-screen filters) and times how long a frame takes to draw with it
+hidden. Each frame is drawn between two pixel read-backs, which wait for the graphics card to finish, so it measures
+the whole cost of drawing whatever the frame cap or the screen's refresh rate: before 0.12 it counted frames, and a
+computer that keeps up with its screen (a 144 Hz desktop) showed every layer as free. It measures drawing, not
+per-frame scripts (particle updates, animations). When lighting or the interface costs 5 ms a frame or a fifth of the
+frame, it also measures their parts (illumination, light colours, background changes and darkness; grid, drawings,
+templates, regions, notes and token bars). For lighting it also hides just the lights while keeping the layers,
+which splits the cost that grows with lights from each layer's fixed work, and tries lighting at half resolution. It
+takes 30 seconds to a minute, only changes what this client draws while it runs, and puts everything back
+afterwards. This is the tool for "low frame rate while nothing is moving".
 
 **Light coverage** (report, Canvas section): how many times over the scene's lights cover its area, how much of it
 they reach and how many overlap there on average, using the shapes Foundry draws them with (walls applied). It lists
@@ -167,6 +176,8 @@ It was written to the budgets in [CLAUDE.md](../../CLAUDE.md):
 - Render scale: one `canvasConfig` listener, which runs once when the canvas is created.
 - Lighting resolution, while below 100%: one `canvasReady` listener that sets two numbers when a scene is drawn. The
   lighting itself then costs less; there is no per-frame work.
+- Lighting resolution on Automatic: one more small file fetched when it is chosen, one increment per rendered frame,
+  a check every 3 seconds, and a `canvasReady` listener, on this computer only. At most one notification per session.
 - Light coverage, each time the report opens on a drawn scene: about 12,000 point tests against the lights' shapes,
   about 30 ms in Node for 50 lights with 300-point shapes.
 - Scene planner, while its *Actors and tokens* tab has been opened and the window is open: a `createToken` and a

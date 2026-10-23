@@ -37,8 +37,9 @@
         "Hint": "Draw the map at fewer pixels than your screen and stretch it to fit. Everything is still drawn, just less sharply: 75% draws a little over half the pixels, which helps most when lights, weather and effects make the graphics card the bottleneck. It doesn't speed up stutters from automation. Takes effect after a reload."
       },
       "LightingScale": {
-        "Name": "Lighting resolution (this computer, experimental)",
-        "Hint": "Draw light and light colours at fewer pixels than the rest of the map. Lights cost per pixel they cover, every frame, even when nothing animates; their glow is a smooth gradient, so it survives being drawn smaller. Light edges at walls get softer; the map, tokens and the interface stay sharp. Works on top of Render scale and takes effect straight away. Measure layer costs in the report shows what it saves on this computer."
+        "Name": "Lighting resolution (this computer)",
+        "Hint": "Draw light and light colours at fewer pixels than the rest of the map. Lights cost per pixel they cover, every frame, even when nothing animates; their glow is a smooth gradient, so it survives being drawn smaller. Light edges at walls get softer; the map, tokens and the interface stay sharp. Automatic keeps full resolution until this computer falls behind its frame cap on a scene, then lowers it a step at a time, keeps a step only if the frame rate actually rose, and tries the sharper step again later. Takes effect straight away.",
+        "Auto": "Automatic"
       },
       "TrackPlay": {
         "Name": "Measure frame rate during play",
@@ -71,7 +72,8 @@
     },
     "Notify": {
       "Applied": "Performance profile {profile} applied.",
-      "ProfilerActive": "Performance Triage: the hook profiler is active on this client and adds a small overhead. Disable it from the performance report when you are done."
+      "ProfilerActive": "Performance Triage: the hook profiler is active on this client and adds a small overhead. Disable it from the performance report when you are done.",
+      "LightingLowered": "This computer was falling behind on this scene, so Performance Triage draws lights at {scale}% resolution here. Lighting resolution in this module's settings controls it."
     },
     "Report": {
       "Title": "Performance Triage",

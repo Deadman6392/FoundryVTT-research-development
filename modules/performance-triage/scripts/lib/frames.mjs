@@ -6,20 +6,14 @@
 export const frameMs = fps => (fps > 0 ? 1000 / fps : Infinity);
 
 /**
- * Turn "frame rate with layer X hidden" measurements into per-layer costs.
- * Frame time is what adds up, not frame rate: going from 18 to 30 fps saves 22 ms per frame.
- * @param {number} baseline                   Frame rate with everything visible
- * @param {{id: string, label: string, fps: number}[]} measurements
- * @param {number} [displayLimit]             Rates near this are capped by the display, so savings are a minimum
- * @returns {{id: string, label: string, fps: number, savedMs: number, atLimit: boolean}[]}
+ * Turn "time to draw a frame with layer X hidden" measurements into per-layer costs.
+ * @param {number} baseMs   Time to draw a frame with everything visible
+ * @param {{id: string, label: string, ms: number, parent?: string}[]} measurements
+ * @returns {{id: string, label: string, ms: number, savedMs: number, parent?: string}[]}
  */
-export function frameCostRows(baseline, measurements, displayLimit = 60) {
-  const base = frameMs(baseline);
-  const rows = measurements.map(m => ({
-    ...m,
-    savedMs: Math.round((base - frameMs(m.fps)) * 10) / 10,
-    atLimit: m.fps >= displayLimit * 0.95
-  }));
+export function drawCostRows(baseMs, measurements) {
+  const round = v => Math.round(v * 10) / 10;
+  const rows = measurements.map(m => ({ ...m, ms: round(m.ms), savedMs: round(baseMs - m.ms) }));
   // Costliest first, each part listed under the experiment it breaks down
   const bySaved = (a, b) => b.savedMs - a.savedMs;
   const out = [];
@@ -27,11 +21,6 @@ export function frameCostRows(baseline, measurements, displayLimit = 60) {
     out.push(top, ...rows.filter(r => r.parent === top.id).sort(bySaved));
   }
   return out;
-}
-
-/** Milliseconds per frame saved going from `baseline` to `fps`. */
-export function frameMsSaved(baseline, fps) {
-  return frameMs(baseline) - frameMs(fps);
 }
 
 /**

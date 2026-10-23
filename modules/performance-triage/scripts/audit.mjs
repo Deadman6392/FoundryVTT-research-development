@@ -49,7 +49,10 @@ export async function collectReport() {
       chatBatchSize: CONFIG.ChatMessage?.batchSize ?? null,
       overridden: safe(() => profileDrift(api.profileId), [])
     },
-    client: { ...safe(collectClient, {}), liveFps, renderScale: api.renderScale ?? 1, lightingScale: api.lightingScale ?? 1 },
+    client: {
+      ...safe(collectClient, {}), liveFps, renderScale: api.renderScale ?? 1, lightingScale: api.lightingScale ?? 1,
+      lightingAuto: api.lightingAuto ? (safe(() => api.autoLightingSummary()) ?? { scenes: [], history: [] }) : null
+    },
     timeline: safe(collectTimeline, {}),
     network: {
       load: telemetry.resources.load?.toJSON(),

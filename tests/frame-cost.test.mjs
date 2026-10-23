@@ -1,6 +1,6 @@
 /**
- * Runs the layer cost measurement against a mock canvas whose frame rate depends on what is visible, and checks
- * that the costs come out right and that every toggle, the frame cap and the idle throttle are restored afterwards.
+ * Runs the layer cost measurement against a mock canvas whose draw time and frame rate depend on what is visible, and
+ * checks that the costs come out right and that every toggle, the frame cap and the idle throttle are restored.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -62,6 +62,18 @@ function frameTime() {
   return ms;
 }
 
+// Drawing a frame moves the clock on by the frame time, as a synchronous draw would, without spending it: a busy loop
+// would be stretched by whatever else the machine runs, and the result depend on the test runner's load. Frame rate
+// windows have no draws in them, so counting frames still runs on real time.
+const realNow = performance.now.bind(performance);
+let drawnMs = 0;
+performance.now = () => realNow() + drawnMs;
+let readBacks = 0;
+canvas.app.render = () => {
+  drawnMs += frameTime();
+};
+canvas.app.renderer.gl = { RGBA: 0x1908, UNSIGNED_BYTE: 0x1401, readPixels: () => readBacks++ };
+
 // A ticker that calls its listeners at the rate the mock scene allows
 const listeners = new Set();
 Object.assign(env.ticker, {
@@ -80,29 +92,34 @@ env.Hooks.callAll("init");
 let suspended = [];
 game.modules.get("performance-triage").api.suspendIdle = s => suspended.push(s);
 
-// Shorter windows than the real 2.5 s keep the suite fast while leaving ~30 frames per measurement
-const FAST = { windowMs: 1500, settleMs: 100 };
+// Shorter windows and fewer samples than the real ones keep the suite fast
+const FAST = { windowMs: 1000, settleMs: 50, samples: 5 };
 const { measureFrameCost } = await import("../modules/performance-triage/scripts/frame-cost.mjs");
 
 test("measures each layer and restores everything", { timeout: 60_000 }, async () => {
   const result = await measureFrameCost(FAST);
   const by = Object.fromEntries(result.rows.map(r => [r.id, r]));
 
-  // Baseline 77 ms/frame (13 fps). Timer jitter makes exact numbers impossible, so check the ordering and ranges.
+  // Frame rate: 77 ms frames, about 13 fps; timer jitter allows only a range
   assert.ok(result.baseline > 11 && result.baseline < 18, `baseline ${result.baseline}`);
-  assert.ok(by.screenFilters.savedMs > by.tokenFilters.savedMs, "screen filters (15 ms) cost more than token filters (10 ms)");
-  assert.ok(by.tokenFilters.savedMs > by.tiles.savedMs, "token filters (10 ms) cost more than tiles (5 ms)");
-  assert.ok(by.tiles.savedMs > 2, `tiles ${by.tiles.savedMs}`);
+  // Draw times are the frame times: 77 ms with everything visible
+  const near = (row, ms) => assert.ok(Math.abs(row.savedMs - ms) <= 0.2, `${row.id}: ${row.savedMs} ms saved, expected ${ms}`);
+  assert.ok(Math.abs(result.baseMs - 77) <= 0.2, `base ${result.baseMs}`);
+  assert.ok(result.stable);
+  near(by.screenFilters, 15);
+  near(by.tokenFilters, 10);
+  near(by.tiles, 5);
   assert.equal(by.visibility, undefined, "an already hidden group is skipped");
-  // Lighting cost more than 5 ms, so its parts were measured and listed under it, costliest first
-  const effectsAt = result.rows.findIndex(r => r.id === "effects");
-  const parts = result.rows.slice(effectsAt + 1).filter(r => r.parent === "effects");
+  // Lighting cost more than 5 ms, so its parts were measured and listed under it
+  near(by.effects, 26);
+  const parts = result.rows.filter(r => r.parent === "effects");
   assert.deepEqual(parts.map(r => r.id).sort(), ["coloration", "illumination", "lightMeshes", "lightingHalf"]);
-  assert.ok(by.illumination.savedMs > by.coloration.savedMs, "illumination (20 ms) costs more than colours (6 ms)");
-  // Hiding the lights saves their 20 ms but not the layers' fixed 6 ms; half resolution saves three quarters of 20 ms.
-  // Frame counts are whole numbers, so allow a few ms either way.
-  assert.ok(by.lightMeshes.savedMs > 14 && by.lightMeshes.savedMs < by.effects.savedMs, `lights ${by.lightMeshes.savedMs}`);
-  assert.ok(by.lightingHalf.savedMs > 9 && by.lightingHalf.savedMs < by.effects.savedMs, `half ${by.lightingHalf.savedMs}`);
+  near(by.illumination, 20);
+  near(by.coloration, 6);
+  // Hiding the lights saves their 20 ms, not the layers' fixed 6; half resolution saves three quarters of the 20
+  near(by.lightMeshes, 20);
+  near(by.lightingHalf, 15);
+  assert.ok(readBacks > 0, "each draw waited for the graphics card");
   assert.equal(by.grid, undefined, "the interface cost too little to break down");
   assert.ok(canvas.effects.illumination.visible && canvas.effects.coloration.visible, "parts are restored");
   assert.ok(lighting.lightSources.every(s => s.layers.illumination.mesh.visible && s.layers.coloration.mesh.visible));
@@ -147,7 +164,7 @@ test("a part Foundry shows again while it is being counted isn't reported", { ti
   const saved = lighting.lightSources;
   lighting.lightSources = [{ layers: { illumination: { mesh: stubborn() }, coloration: { mesh: stubborn() } } }];
   try {
-    const result = await measureFrameCost({ windowMs: 400, settleMs: 50 });
+    const result = await measureFrameCost({ windowMs: 400, settleMs: 50, samples: 3 });
     assert.ok(result.rows.some(r => r.id === "illumination"), "lighting was broken down");
     assert.ok(!result.rows.some(r => r.id === "lightMeshes"), "no row for a hide that didn't hold");
   } finally {

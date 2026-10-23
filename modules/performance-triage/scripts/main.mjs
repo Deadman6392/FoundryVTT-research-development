@@ -18,6 +18,9 @@ import "./lib/hook-profiler.mjs";
 
 bootstrap();
 
+/** The Lighting resolution setting's value for Automatic. */
+const LIGHTING_AUTO = 0;
+
 /** Record load history after the one-minute frame rate sample, so its result is included. */
 const HISTORY_DELAY_MS = 65_000;
 
@@ -27,7 +30,10 @@ const state = {
   idle: null,
   renderScale: 1,
   lightingScale: 1,
-  lightingHook: null
+  lightingHook: null,
+  lightingAuto: false,
+  autoLighting: null,
+  measuring: false
 };
 
 /* -------------------------------------------- */
@@ -157,7 +163,7 @@ function registerSettings() {
     scope: "client",
     config: true,
     type: Number,
-    choices: { 1: "100%", 0.75: "75%", 0.5: "50%" },
+    choices: { 1: "100%", 0.75: "75%", 0.5: "50%", [LIGHTING_AUTO]: "PTRIAGE.Settings.LightingScale.Auto" },
     default: 1,
     // Applies to the canvas being viewed straight away, and to every scene drawn after it
     onChange: value => useLightingScale(value)
@@ -270,18 +276,39 @@ function setLightingScale(scale) {
   return out;
 }
 
-/** Apply the setting now and on every scene drawn later; filters are recreated with each canvas draw. */
-function useLightingScale(value) {
-  const scale = Number(value) || 1;
+/** Use a lighting resolution on the canvas being viewed. */
+function applyLighting(scale) {
   state.lightingScale = scale;
-  if ( (scale < 1) && !state.lightingHook ) {
-    state.lightingHook = Hooks.on("canvasReady", () => setLightingScale(state.lightingScale));
-  }
   if ( globalThis.canvas?.ready ) setLightingScale(scale);
-  if ( (scale >= 1) && state.lightingHook ) {
+}
+
+/**
+ * Apply the setting now and on every scene drawn later; filters are recreated with each canvas draw. Automatic loads
+ * its controller, which picks the step per scene from the frame rate it sees; it isn't fetched otherwise.
+ */
+async function useLightingScale(value) {
+  const auto = Number(value) === LIGHTING_AUTO;
+  state.lightingAuto = auto;
+  if ( state.lightingHook ) {
     Hooks.off("canvasReady", state.lightingHook);
     state.lightingHook = null;
   }
+  if ( auto ) {
+    try {
+      state.autoLighting ??= await import("./auto-lighting.mjs");
+      // The setting can change again while the code loads
+      if ( state.lightingAuto ) {
+        state.autoLighting.startAutoLighting({ apply: applyLighting, isPaused: () => !!state.idle?.throttled || state.measuring });
+      }
+    } catch(err) {
+      console.warn(`${MODULE_ID} | Could not start automatic lighting resolution`, err);
+    }
+    return;
+  }
+  state.autoLighting?.stopAutoLighting();
+  const scale = Number(value) || 1;
+  if ( scale < 1 ) state.lightingHook = Hooks.on("canvasReady", () => setLightingScale(state.lightingScale));
+  applyLighting(scale);
 }
 
 /* -------------------------------------------- */
@@ -359,9 +386,15 @@ Hooks.once("init", () => {
     get profileId() { return state.profileId; },
     get renderScale() { return state.renderScale; },
     get lightingScale() { return state.lightingScale; },
+    get lightingAuto() { return state.lightingAuto; },
+    autoLightingSummary: () => state.autoLighting?.autoLightingSummary() ?? null,
     setLightingScale,
     get idle() { return state.idle?.status() ?? null; },
-    suspendIdle: suspended => state.idle?.suspend(suspended),
+    // Measurements pause the idle throttle and automatic lighting resolution, which would otherwise react to them
+    suspendIdle: suspended => {
+      state.measuring = suspended;
+      state.idle?.suspend(suspended);
+    },
     collectReport: async () => (await import("./audit.mjs")).collectReport(),
     measureFrameCost: async () => (await import("./frame-cost.mjs")).measureFrameCost(),
     recordCpuProfile: async seconds => (await import("./sampler.mjs")).recordProfile(seconds)

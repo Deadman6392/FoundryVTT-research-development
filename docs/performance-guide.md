@@ -169,8 +169,9 @@ interior with 48 lights, 623 walls and rain drew at 11.6 fps; hiding lighting to
 - **Render scale** (this module's settings, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's
   pixels and stretches it. Nothing is removed, everything is just less sharp, and 75% draws a little over half the
   pixels. It needs a reload, and it is new: try it on one computer before relying on it.
-- **Lighting resolution** (this module's settings, per computer, experimental): draws lights at 75% or 50% of the
-  canvas resolution, map and tokens untouched. See *Lighting* below.
+- **Lighting resolution** (this module's settings, per computer): draws lights at 75% or 50% of the canvas
+  resolution, map and tokens untouched, or *Automatic*, which only lowers it when that computer falls behind. See
+  *Lighting* below.
 - **Less light overlap on heavy scenes.** Each light is drawn every frame over the area it reaches, on every
   computer. See *Lighting* below.
 - **Foundry's performance mode** (the Balanced and Low profiles set it): besides Foundry's own quality, FXMaster
@@ -208,6 +209,12 @@ one hall draw that hall three times. In practice:
   what it saves, and also hides just the lights while keeping the layers, so you can see how much of lighting grows
   with the lights at all (the rest is each layer's fixed work over the screen, which no amount of light pruning
   removes).
+
+The list above is scene preparation. In the middle of a session nobody is going to trim a light's radius, and the
+worst case is a GM on an old computer zoomed out over a whole floor while players light torches as they go. That is
+what *Automatic* lighting resolution is for: set it once on that computer (or on any computer you're unsure of), and
+it leaves lighting sharp until that computer can't hold its frame cap on a scene, then lowers lighting a step and
+keeps the step only if the frame rate rose. On a fast computer it never does anything.
 
 What this can't tell you: whether a light's tint or animation type costs more than another's. The measurements hide
 whole layers or all lights at once; per-light shader cost isn't something the browser exposes.

@@ -483,7 +483,7 @@ export function recommend(report) {
       const partsOf = r => fc.rows.filter(p => (p.parent === r.id) && (p.savedMs >= 1) && (p.id !== "lightingHalf"));
       const line = r => {
         const parts = partsOf(r).map(p => `${PART_NAMES[p.id] ?? p.label} ${p.savedMs} ms`);
-        return `${r.label}: ${r.atLimit ? "at least " : ""}${r.savedMs} ms per frame${parts.length ? ` (${parts.join(", ")})` : ""}`;
+        return `${r.label}: ${r.savedMs} ms per frame${parts.length ? ` (${parts.join(", ")})` : ""}`;
       };
       add("high", "Scene", `What costs the most to draw on this computer (baseline ${Math.round(fc.baseline)} fps on ${fc.scene || "this scene"})`,
         costly.map(line).join("; ")
@@ -675,7 +675,7 @@ function layerAdvice(row, parts, report) {
         + "light any cheaper to draw: every light is drawn again on every frame either way."
       : "Try the Low profile (which switches to Low performance mode) and measure again.",
     meshes ? meshDetail(meshes, row) : lightCount(report.canvas?.scene?.lights),
-    halfDetail(half, lightingScale),
+    halfDetail(half, lightingScale, !!cl.lightingAuto),
     ((cl.renderScale ?? 1) < 1) ? "" : "Render scale (this module's settings, per computer) at 75% draws a little "
       + "over half the pixels, which is what this cost grows with; it needs a reload."
   ].filter(Boolean).join(" ");
@@ -702,15 +702,18 @@ function meshDetail(meshes, effects) {
 }
 
 /** What drawing lighting at half resolution did in the measurement. */
-function halfDetail(half, lightingScale) {
+function halfDetail(half, lightingScale, auto) {
+  const setting = auto
+    ? "Lighting resolution is on Automatic here, so it steps down by itself when this computer falls behind."
+    : "Set Lighting resolution (this module's settings, per computer) to Automatic to have it step down only when "
+      + "this computer falls behind, or to 50% to keep it there.";
   if ( half ) {
     return (half.savedMs >= 1)
-      ? `Drawing lighting at half resolution saved ${half.savedMs} ms per frame in the test: set Lighting resolution `
-        + "(this module's settings, per computer) to 50% and check that lights still look right to you."
+      ? `Drawing lighting at half resolution saved ${half.savedMs} ms per frame in the test. ${setting}`
       : "Drawing lighting at half resolution saved nothing measurable in the test, so Lighting resolution won't help "
         + "on this computer.";
   }
-  return (lightingScale < 1) ? ""
+  return (auto || (lightingScale < 1)) ? ""
     : "Lighting resolution (this module's settings, per computer) draws lights at fewer pixels than the map; measuring "
       + "layer costs again shows what it would save.";
 }
