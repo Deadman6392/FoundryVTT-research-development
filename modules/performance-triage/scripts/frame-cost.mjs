@@ -14,14 +14,20 @@ const WINDOW_MS = 2500;
 const SETTLE_MS = 500;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-/** Hide display objects; returns an undo function, or null when there was nothing to hide. */
+/**
+ * Hide display objects; returns an undo function, or null when there was nothing to hide. The undo function's `held`
+ * says whether most of them are still hidden: Foundry can show an object again during a refresh, and then the
+ * measurement isn't of it being hidden.
+ */
 function hide(objects) {
   const saved = objects.filter(o => o && o.visible).map(o => [o, o.visible]);
   if ( !saved.length ) return null;
   for ( const [o] of saved ) o.visible = false;
-  return () => {
+  const undo = () => {
     for ( const [o, v] of saved ) o.visible = v;
   };
+  undo.held = () => saved.filter(([o]) => !o.visible).length >= (saved.length / 2);
+  return undo;
 }
 
 /** Remove filters from display objects; returns an undo function, or null when none had filters. */
@@ -59,8 +65,34 @@ const EXPERIMENTS = [
 const BREAKDOWN_MS = 5;
 
 /**
+ * Every light's own meshes, with the lighting layers left in place. What this saves is the part of lighting that grows
+ * with lights and the area they cover; the rest is each layer's fixed full-screen work. Light sources are
+ * EffectsCanvasGroup#lightSources, and each layer's mesh is RenderedEffectSource#layers[id].mesh (v13 and v14 API).
+ */
+function hideLightMeshes() {
+  const meshes = [];
+  for ( const source of canvas.effects?.lightSources ?? [] ) {
+    for ( const layer of Object.values(source?.layers ?? {}) ) meshes.push(layer?.mesh);
+  }
+  return hide(meshes);
+}
+
+/** The Lighting resolution setting at 50%, unless this computer already uses that or less. */
+function halveLighting() {
+  const api = game.modules.get(MODULE_ID).api;
+  const current = api.lightingScale ?? 1;
+  if ( (current <= 0.5) || !api.setLightingScale ) return null;
+  const changed = api.setLightingScale(0.5);
+  if ( !changed.length ) return null;
+  const undo = () => api.setLightingScale(current);
+  undo.held = () => changed.every(c => canvas.effects?.[c.layer]?.filter?.resolution === c.resolution);
+  return undo;
+}
+
+/**
  * The parts of the costlier experiments. Lighting's four layers are EffectsCanvasGroup members in the v13 and v14
  * API docs; interface layers are found by CanvasLayer#options.name (v13 docs), and any that aren't there are skipped.
+ * A part either hides an object or applies a change of its own and returns how to undo it.
  */
 const interfaceLayer = name => () => (canvas.interface?.children ?? []).find(c => c?.options?.name === name);
 const PARTS = {
@@ -68,7 +100,9 @@ const PARTS = {
     { id: "illumination", label: "Lighting: how brightly lights illuminate the map", object: () => canvas.effects?.illumination },
     { id: "coloration", label: "Lighting: light colours", object: () => canvas.effects?.coloration },
     { id: "background", label: "Lighting: changes lights make to the map under them", object: () => canvas.effects?.background },
-    { id: "darkness", label: "Lighting: darkness sources", object: () => canvas.effects?.darkness }
+    { id: "darkness", label: "Lighting: darkness sources", object: () => canvas.effects?.darkness },
+    { id: "lightMeshes", label: "Lighting: the lights themselves (every light hidden, layers kept)", apply: hideLightMeshes },
+    { id: "lightingHalf", label: "Lighting drawn at half resolution (nothing hidden)", apply: halveLighting }
   ],
   interface: [
     { id: "grid", label: "Interface: grid", object: interfaceLayer("grid") },
@@ -118,7 +152,9 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
         undo = apply();
         if ( !undo ) return; // Nothing of this kind on the scene
         await wait(settleMs);
-        rows.push({ id, label, fps: await countFps(windowMs), ...(parent ? { parent } : {}) });
+        const fps = await countFps(windowMs);
+        if ( undo.held?.() === false ) return; // Undone by something else while counting: not a measurement of it
+        rows.push({ id, label, fps, ...(parent ? { parent } : {}) });
       } finally {
         undo?.();
       }
@@ -128,7 +164,7 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
     for ( const [parent, parts] of Object.entries(PARTS) ) {
       const row = rows.find(r => r.id === parent);
       if ( !row || (frameMsSaved(baseline, row.fps) < BREAKDOWN_MS) ) continue;
-      for ( const part of parts ) await measure(part.id, part.label, () => hide([part.object()]), parent);
+      for ( const part of parts ) await measure(part.id, part.label, part.apply ?? (() => hide([part.object()])), parent);
     }
     await wait(settleMs);
     baselineEnd = await countFps(windowMs);

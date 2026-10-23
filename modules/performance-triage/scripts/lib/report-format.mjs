@@ -216,6 +216,7 @@ function sections(report, opts = {}) {
     ["GPU", env.gpu ?? "–"], ["WebGL 2", env.webgl2 ? "yes" : "no"], ["Max texture size", env.maxTexture ?? "–"],
     ["Device pixel ratio", env.dpr], ["Renderer resolution", cl.rendererResolution ?? "–"],
     ["Render scale", `${Math.round((cl.renderScale ?? 1) * 100)}%`],
+    ["Lighting resolution", lightingResolution(cl)],
     ["Performance mode", perf ? ["Low", "Medium", "High", "Maximum"][perf.mode] ?? perf.mode : "–"],
     ["Frame cap", perf ? (perf.fps || "uncapped") : "–"],
     ["Measured frame rate", cl.fps ? `${cl.fps.achieved} fps over the first minute (target ${cl.fps.target})`
@@ -234,6 +235,17 @@ function sections(report, opts = {}) {
         ["Texture memory", `${fmtBytes(cv.textureMemory)} (${cv.textureMemorySource})`]
       ]
     });
+    const lc = cv.lightCoverage;
+    if ( lc?.count ) {
+      tables.push({
+        caption: `Lights on this scene: ${lc.count} drawn, covering ${lc.cover}x the scene's area; they reach `
+          + `${Math.round(lc.lit * 100)}% of it, ${lc.overlap} lights deep on average`
+          + (lc.unwalled ? `; ${lc.unwalled} ignore walls` : ""),
+        head: ["Largest lights", "Radius", "Walls", "Share of all light area", "Other lights over the same area"],
+        rows: lc.largest.map(l => [l.kind === "token" ? `Token: ${l.name}` : "Light", s.gridSize ? `${Math.round((l.radius / s.gridSize) * 10) / 10} grid` : `${l.radius} px`,
+          l.walls ? "yes" : "ignored", `${Math.round(l.share * 100)}%`, l.overlap])
+      });
+    }
     tables.push({
       caption: "Largest textures on this scene", head: ["Image", "Kind", "Dimensions", "GPU memory"],
       rows: cv.textures.slice(0, 10).map(t => [shortUrl(t.src), t.video ? `${t.kind} (video)` : t.kind, `${t.width}x${t.height}`, fmtBytes(t.bytes)])
@@ -244,7 +256,7 @@ function sections(report, opts = {}) {
     tables.push({
       caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseline} fps with everything visible, `
         + `${fc.baselineEnd} fps at the end${fc.stable ? "" : "; drifted, treat as rough"})`,
-      head: ["Hidden for the test", "Frame rate", "Time saved per frame"],
+      head: ["Hidden or changed for the test", "Frame rate", "Time saved per frame"],
       rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.fps} fps`, `${r.atLimit ? "at least " : ""}${r.savedMs} ms`])
     });
   }
@@ -257,7 +269,8 @@ function sections(report, opts = {}) {
         + "the map will flicker, and nothing is saved or changed for anyone else."
       : "",
     tables,
-    actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (30 to 60 s)"]] : []
+    actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (30 to 60 s)"],
+      ...((report.env?.isGM && cv.lightCoverage?.largest?.some(l => l.kind === "light")) ? [["selectLargestLights", "Select the largest lights"]] : [])] : []
   });
 
   // World
@@ -341,6 +354,15 @@ function sections(report, opts = {}) {
     });
   }
   return out;
+}
+
+/** "50% (illumination 50%, light colours 50%)", or what the setting asked for when the layers weren't read. */
+function lightingResolution(cl) {
+  const asked = `${Math.round((cl.lightingScale ?? 1) * 100)}%`;
+  const actual = cl.lightingResolution;
+  if ( !actual ) return asked;
+  const parts = Object.entries(actual).map(([k, v]) => `${k === "coloration" ? "light colours" : k} ${Math.round(v * 100)}%`);
+  return `${asked} (${parts.join(", ")} of the canvas)`;
 }
 
 /** "Castle: about 22 of 60 fps" for the slowest scene with a minute or more measured. */

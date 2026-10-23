@@ -7,6 +7,7 @@ import { telemetry, rendererInfo, countFps, timelineSnapshot } from "./telemetry
 import { readHistory } from "./history.mjs";
 import { previousPlay } from "./play-tracker.mjs";
 import { knownSettingKeys, countAuras, AURA_MODULES } from "./lib/known-settings.mjs";
+import { lightCoverage } from "./lib/light-coverage.mjs";
 import { recommend } from "./lib/recommend.mjs";
 import { PROFILES, valuesEqual, splitSettingKey } from "./lib/profiles.mjs";
 
@@ -48,7 +49,7 @@ export async function collectReport() {
       chatBatchSize: CONFIG.ChatMessage?.batchSize ?? null,
       overridden: safe(() => profileDrift(api.profileId), [])
     },
-    client: { ...safe(collectClient, {}), liveFps, renderScale: api.renderScale ?? 1 },
+    client: { ...safe(collectClient, {}), liveFps, renderScale: api.renderScale ?? 1, lightingScale: api.lightingScale ?? 1 },
     timeline: safe(collectTimeline, {}),
     network: {
       load: telemetry.resources.load?.toJSON(),
@@ -152,8 +153,42 @@ function collectClient() {
     resolutionScaling: setting("core", "pixelRatioResolutionScaling"),
     noCanvas: setting("core", "noCanvas"),
     canvasPerformance: globalThis.canvas?.performance ? { ...canvas.performance } : null,
-    rendererResolution: globalThis.canvas?.app?.renderer?.resolution ?? null
+    rendererResolution: globalThis.canvas?.app?.renderer?.resolution ?? null,
+    // What the lighting layers' filters actually use, so a report shows whether the Lighting resolution setting took
+    lightingResolution: safe(() => {
+      const r = canvas.app.renderer.resolution;
+      const out = {};
+      for ( const id of ["illumination", "coloration"] ) {
+        const f = canvas.effects?.[id]?.filter;
+        if ( f && ("resolution" in f) ) out[id] = Math.round(((f.resolution || r) / r) * 100) / 100;
+      }
+      return Object.keys(out).length ? out : null;
+    })
   };
+}
+
+/**
+ * Lights on the scene being viewed, as the polygons Foundry draws them with (walls applied). The global light has no
+ * placeable and lights the whole scene in one pass, so it isn't counted. EffectsCanvasGroup#lightSources and the
+ * source members used here are in the v13 and v14 API.
+ */
+function collectLightCoverage() {
+  const shapes = [];
+  for ( const source of canvas.effects?.lightSources ?? [] ) {
+    const doc = source?.object?.document;
+    const points = source?.shape?.points;
+    if ( !doc || !source.active || !points?.length ) continue;
+    const token = doc.documentName === "Token";
+    shapes.push({
+      id: doc.id,
+      kind: token ? "token" : "light",
+      name: token ? doc.name : "",
+      radius: source.radius,
+      walls: token ? true : (doc.walls !== false),
+      points
+    });
+  }
+  return lightCoverage(shapes, canvas.dimensions.sceneRect);
 }
 
 function collectTimeline() {
@@ -198,6 +233,7 @@ function collectCanvas() {
     textureMemorySource: Number.isFinite(loaderUsage) ? "TextureLoader" : "estimate",
     sceneTextureMemory: estimated,
     textures: textures.slice(0, 15),
+    lightCoverage: safe(collectLightCoverage),
     scene: {
       name: scene.name,
       width: d.width ?? null,

@@ -86,3 +86,34 @@ test("turning the setting on starts tracking on this computer", async () => {
   for ( let i = 0; (i < 50) && telemetry.play; i++ ) await wait(10);
   assert.equal(telemetry.play, null);
 });
+
+test("lighting resolution lowers the lighting layers' filters, follows new scenes and restores Foundry's values", async () => {
+  const api = game.modules.get("performance-triage").api;
+  // Each canvas draw creates the layers' masking filters afresh; null means "the render target's resolution"
+  // (PIXI's default is 1 whatever the canvas resolution)
+  const drawEffects = () => ({ illumination: { filter: { resolution: null } }, coloration: { filter: { resolution: 1 } } });
+  Object.assign(canvas, { ready: true, effects: drawEffects() });
+  canvas.app.renderer.resolution = 0.75; // Render scale at 75%
+  const listeners = () => env.Hooks.events.canvasReady?.length ?? 0;
+  const before = listeners();
+
+  await game.settings.set("performance-triage", "lightingScale", 0.5);
+  assert.equal(api.lightingScale, 0.5);
+  assert.equal(canvas.effects.illumination.filter.resolution, 0.375, "half of what the canvas draws at");
+  assert.equal(canvas.effects.coloration.filter.resolution, 0.375, "of the canvas, not of PIXI's default");
+  assert.equal(listeners(), before + 1, "one listener while it's on");
+
+  canvas.effects = drawEffects(); // Another scene
+  env.Hooks.callAll("canvasReady", canvas); // Also ends one-time startup listeners
+  assert.equal(canvas.effects.illumination.filter.resolution, 0.375, "applied to the new scene's filters");
+  const withOurs = listeners();
+
+  await game.settings.set("performance-triage", "lightingScale", 1);
+  assert.equal(canvas.effects.illumination.filter.resolution, null, "Foundry's own values are back");
+  assert.equal(canvas.effects.coloration.filter.resolution, 1);
+  assert.equal(listeners(), withOurs - 1, "and the listener is gone");
+
+  // A canvas without these layers (another core version, or no canvas) is left alone
+  canvas.effects = {};
+  assert.deepEqual(api.setLightingScale(0.5), []);
+});

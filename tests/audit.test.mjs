@@ -153,3 +153,35 @@ test("aura definitions are counted across world actors and unlinked tokens when 
     for ( const id of ["chris-premades", "auraeffects"] ) game.modules.delete(id);
   }
 });
+
+test("a drawn canvas reports its lights as Foundry draws them, and what the lighting layers' filters use", async () => {
+  const square = (x, y, size) => [x, y, x + size, y, x + size, y + size, x, y + size];
+  const source = (doc, points, extra = {}) => ({ active: true, radius: 300, object: doc && { document: doc }, shape: { points }, ...extra });
+  const sources = [
+    source({ id: "L1", documentName: "AmbientLight", walls: false }, square(0, 0, 600)),
+    source({ id: "T1", documentName: "Token", name: "Ireena" }, square(500, 0, 200)),
+    source({ id: "L2", documentName: "AmbientLight", walls: true }, square(0, 0, 100), { active: false }),
+    // The global light belongs to the environment group, not a placeable
+    { active: true, object: {}, shape: { points: square(0, 0, 1000) } }
+  ];
+  const r = 0.75;
+  Object.assign(canvas, {
+    ready: true,
+    scene: { name: "Interior", background: {}, lights: collection([]), tiles: collection([]) },
+    dimensions: { width: 1400, height: 1400, size: 100, sceneRect: { x: 0, y: 0, width: 1000, height: 1000 } },
+    effects: { lightSources: collection(sources), illumination: { filter: { resolution: 0.375 } }, coloration: { filter: { resolution: null } } }
+  });
+  canvas.app.renderer.resolution = r;
+  try {
+    const report = await collectReport();
+    const lc = report.canvas.lightCoverage;
+    assert.equal(lc.count, 2, "inactive lights and the global light aren't counted");
+    assert.equal(lc.unwalled, 1);
+    assert.deepEqual(lc.largest.map(l => [l.id, l.kind, l.name, l.walls]), [["L1", "light", "", false], ["T1", "token", "Ireena", true]]);
+    assert.deepEqual(report.client.lightingResolution, { illumination: 0.5, coloration: 1 }, "relative to the canvas");
+    assert.equal(report.client.lightingScale, 1);
+  } finally {
+    canvas.ready = false;
+    delete canvas.effects;
+  }
+});

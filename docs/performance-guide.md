@@ -169,9 +169,10 @@ interior with 48 lights, 623 walls and rain drew at 11.6 fps; hiding lighting to
 - **Render scale** (this module's settings, per computer): draws the map at 85%, 75%, 60% or 50% of the screen's
   pixels and stretches it. Nothing is removed, everything is just less sharp, and 75% draws a little over half the
   pixels. It needs a reload, and it is new: try it on one computer before relying on it.
-- **Fewer lights on heavy scenes.** Each light is drawn every frame over the area it lights, on every computer.
-  Clusters of candles or sconces can often be one light; decorative lights players won't miss can go; a light left
-  white skips the colour pass.
+- **Lighting resolution** (this module's settings, per computer, experimental): draws lights at 75% or 50% of the
+  canvas resolution, map and tokens untouched. See *Lighting* below.
+- **Less light overlap on heavy scenes.** Each light is drawn every frame over the area it reaches, on every
+  computer. See *Lighting* below.
 - **Foundry's performance mode** (the Balanced and Low profiles set it): besides Foundry's own quality, FXMaster
   reads it to thin out weather particles, to half on Medium and a quarter on Low, and Dice So Nice lowers its quality
   on Low for players who haven't customized it. FXMaster's filter effects (fog, colour) don't scale.
@@ -180,6 +181,36 @@ interior with 48 lights, 623 walls and rain drew at 11.6 fps; hiding lighting to
   the interface, which Sequencer's own settings describe as a significant performance hit.
 - **Minimum** removes things instead: Sequencer effects are hidden (they still load and play, just aren't drawn),
   FXMaster weather is off, and Aura Effects' radius drawings are off on that computer.
+
+### Lighting
+
+Two reports from that work PC on the same interior, one at full render scale and one at 75%, show what lighting
+costs and why. At full scale lighting cost 44.8 ms of a 74 ms frame: 22.5 ms for light colours, 16.7 for
+illumination, 4.1 for lights changing the map under them and 2.1 for darkness. At 75% it cost 25.1 ms, 56% as much
+for 56% of the pixels. The cost follows pixels almost exactly, so it is the graphics card shading every pixel each
+light covers, once per lighting layer, on every frame. That is why Low performance mode doesn't help a plain orange
+torch: Low stops lights animating, but a still light is drawn again on every frame just the same.
+
+So what counts is the area lights cover on screen and how many overlap there, not how many lights there are. Twenty
+sconces in separate rooms, each clipped by its walls, draw each room once; three lights whose radii all reach across
+one hall draw that hall three times. In practice:
+
+- **Overlap, not count.** Let each sconce in a corridor reach about as far as the next one instead of across the
+  whole corridor; dim radius past the next light is drawn even where that light already lights the floor. One light
+  for a cluster of candles.
+- **Walls.** A light that ignores walls (natural light, scenery) is drawn through every room in its radius. Keep
+  walls on unless it really has to shine through.
+- **Big ambient lights first.** The report's light table lists the scene's largest lights with how much of all the
+  light area each one is, and how many other lights cover the same ground. A room-sized ambient light under a dozen
+  torches is often the cheapest win.
+- **Fewer pixels.** Render scale lowers everything; Lighting resolution lowers only the lights, which are smooth
+  gradients and lose less from it. *Measure layer costs* tries half-resolution lighting on that computer and shows
+  what it saves, and also hides just the lights while keeping the layers, so you can see how much of lighting grows
+  with the lights at all (the rest is each layer's fixed work over the screen, which no amount of light pruning
+  removes).
+
+What this can't tell you: whether a light's tint or animation type costs more than another's. The measurements hide
+whole layers or all lights at once; per-light shader cost isn't something the browser exposes.
 
 **For stutters when tokens move:** the report counts how long frames took beyond the scene's normal frame time after
 each move, and names the modules whose scripts ran in them (drawing the canvas itself is left out). On a computer

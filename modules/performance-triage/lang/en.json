@@ -36,6 +36,10 @@
         "Name": "Render scale (this computer)",
         "Hint": "Draw the map at fewer pixels than your screen and stretch it to fit. Everything is still drawn, just less sharply: 75% draws a little over half the pixels, which helps most when lights, weather and effects make the graphics card the bottleneck. It doesn't speed up stutters from automation. Takes effect after a reload."
       },
+      "LightingScale": {
+        "Name": "Lighting resolution (this computer, experimental)",
+        "Hint": "Draw light and light colours at fewer pixels than the rest of the map. Lights cost per pixel they cover, every frame, even when nothing animates; their glow is a smooth gradient, so it survives being drawn smaller. Light edges at walls get softer; the map, tokens and the interface stay sharp. Works on top of Render scale and takes effect straight away. Measure layer costs in the report shows what it saves on this computer."
+      },
       "TrackPlay": {
         "Name": "Measure frame rate during play",
         "Hint": "On every computer: frame rate and stutters per scene, and how long the work after each token move holds the page, by module. Shown in each player's report; players who share a summary send their previous session's numbers to the GM at their next load. Costs one counter per rendered frame and a check every 5 seconds."
@@ -80,7 +84,8 @@
       "MeasureFailed": "The layer cost measurement failed. See the browser console for details.",
       "LowProfileSet": "This computer will use the Low profile after a reload. You can change it back under My performance profile in this module's settings.",
       "TrackingOn": "Frame rate during play is now measured on every computer. Play a session, then check this report and Client profiles.",
-      "TimingActors": "Timing actor preparation for every world actor and every unlinked token. On a large world this takes 10 seconds or more; the game may stutter until it finishes."
+      "TimingActors": "Timing actor preparation for every world actor and every unlinked token. On a large world this takes 10 seconds or more; the game may stutter until it finishes.",
+      "LightsGone": "Those lights are no longer on the scene being viewed. Refresh the report."
     },
     "Profiles": {
       "Title": "Client Performance Profiles",
