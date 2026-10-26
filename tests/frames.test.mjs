@@ -1,17 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { frameMs, frameCostRows, settledAt, phasesWithin, worldDataWait } from "../modules/performance-triage/scripts/lib/frames.mjs";
+import { frameMs, drawCostRows, settledAt, phasesWithin, worldDataWait } from "../modules/performance-triage/scripts/lib/frames.mjs";
 
-test("frameCostRows converts frame rates into time saved per frame, largest first", () => {
-  const rows = frameCostRows(18, [
-    { id: "tokens", label: "Tokens", fps: 30 },
-    { id: "tiles", label: "Tiles", fps: 19 },
-    { id: "primary", label: "Everything", fps: 60 }
+test("drawCostRows turns draw times into time saved per frame, costliest first, parts under their layer", () => {
+  const rows = drawCostRows(20, [
+    { id: "tokens", label: "Tokens", ms: 12.04 },
+    { id: "tiles", label: "Tiles", ms: 19 },
+    { id: "coloration", label: "Light colours", ms: 18, parent: "effects" },
+    { id: "effects", label: "Lighting", ms: 15 },
+    { id: "illumination", label: "Illumination", ms: 17, parent: "effects" }
   ]);
-  assert.deepEqual(rows.map(r => r.id), ["primary", "tokens", "tiles"]);
-  assert.equal(rows[1].savedMs, 22.2, "18 -> 30 fps saves 55.6 - 33.3 ms");
-  assert.equal(rows[0].atLimit, true, "60 fps is the display limit, so the saving is a minimum");
-  assert.equal(rows[2].atLimit, false);
+  assert.deepEqual(rows.map(r => r.id), ["tokens", "effects", "illumination", "coloration", "tiles"]);
+  assert.equal(rows[0].savedMs, 8);
+  assert.equal(rows[0].ms, 12);
   assert.equal(frameMs(0), Infinity);
 });
 

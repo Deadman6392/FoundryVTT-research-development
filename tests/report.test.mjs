@@ -529,3 +529,24 @@ test("lighting advice says how much is the lights themselves, what half resoluti
   assert.ok(!quiet.some(f => f.title.startsWith("Lights on Interior")));
   assert.ok(!reportToHtml({ ...report, findings: quiet }).includes("selectLargestLights"));
 });
+
+test("draw times and automatic lighting resolution show in the Canvas section", () => {
+  const report = sampleReport();
+  report.client = { ...report.client, lightingScale: 0.75, lightingResolution: { illumination: 0.75, coloration: 0.75 },
+    lightingAuto: { scenes: [{ name: "Interior", scale: 0.75 }], history: [
+      { scene: "Interior", from: 1, to: 0.75, before: 21.5, after: 27, at: 754_000 },
+      { scene: "Tavern", from: 1, to: 0.75, before: 19, after: 19.2, at: 1_200_000, kept: false }
+    ] } };
+  report.canvas = { ready: true, textureMemory: 0, textures: [], scene: { name: "Interior", lights: 48 } };
+  report.frameCost = { scene: "Interior", baseline: 143.9, baselineEnd: 143.9, baseMs: 4.2, baseMsEnd: 4.3, stable: true, rows: [
+    { id: "effects", label: "Lighting and vision effects", ms: 2.6, savedMs: 1.6 },
+    { id: "lightingHalf", label: "Lighting drawn at half resolution", ms: 3.5, savedMs: 0.7, parent: "effects" }
+  ] };
+  const html = reportToHtml({ ...report, findings: recommend(report) });
+  assert.ok(html.includes("Automatic, now 75% (illumination 75%, light colours 75% of the canvas)"));
+  assert.ok(html.includes("<td>Interior</td><td>12.6</td><td>100% → 75%</td><td>21.5 fps</td><td>27 fps</td>"));
+  assert.ok(html.includes("100% → 75% (undone: no faster)"));
+  assert.ok(html.includes("Interior: 4.2 ms to draw a frame with everything visible, 4.3 ms at the end; 143.9 fps uncapped"));
+  assert.ok(html.includes("<td>↳ Lighting drawn at half resolution</td><td>3.5 ms</td><td>0.7 ms</td>"));
+  assert.ok(!recommend(report).some(f => f.title.startsWith("What costs the most")), "1.6 ms at 144 fps is no problem");
+});

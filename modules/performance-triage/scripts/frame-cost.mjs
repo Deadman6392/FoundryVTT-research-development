@@ -1,18 +1,45 @@
 /**
- * Measure what each part of the canvas costs on this computer by hiding it briefly and counting frames.
+ * Measure what each part of the canvas costs on this computer by hiding it briefly and timing how long a frame takes
+ * to draw.
  *
- * Browsers don't expose GPU timings, but when the canvas can't reach its frame cap the frame rate is set by how much
- * there is to draw, so hiding a layer and watching the frame rate rise is a direct measurement of that layer's cost.
+ * Browsers don't expose GPU timings, but reading one pixel back from the canvas waits until the graphics card has
+ * finished everything sent to it. So drawing the canvas once between two read-backs, and timing it, gives the full
+ * cost of a frame (the CPU's part and the GPU's), whatever the frame cap or the screen's refresh rate. Counting
+ * frames, as this did before 0.12, can't see anything on a computer that already keeps up with its screen.
  * Everything is a local, temporary visibility or filter change on this client: no documents or settings are touched,
  * and every change is undone even if something fails. Loaded on demand.
  */
 import { MODULE_ID } from "./constants.mjs";
 import { telemetry, countFps } from "./telemetry.mjs";
-import { frameCostRows, frameMsSaved } from "./lib/frames.mjs";
+import { drawCostRows } from "./lib/frames.mjs";
 
 const WINDOW_MS = 2500;
 const SETTLE_MS = 500;
+const SAMPLES = 15;
 const wait = ms => new Promise(r => setTimeout(r, ms));
+
+/**
+ * Draw the canvas `samples` times, each time between two pixel read-backs, and return the median time in ms.
+ * Application#render is PIXI 7's single-frame draw (`renderer.render(stage)`), the one the ticker calls each frame.
+ * The page gets a turn between samples, so the canvas keeps running while this measures.
+ */
+async function drawMs(samples) {
+  const app = canvas.app;
+  const gl = app.renderer.gl;
+  const pixel = new Uint8Array(4);
+  const finish = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  const times = [];
+  for ( let i = 0; i < samples; i++ ) {
+    finish(); // Whatever the ticker drew before must not be counted
+    const start = performance.now();
+    app.render();
+    finish();
+    times.push(performance.now() - start);
+    await wait(0);
+  }
+  times.sort((a, b) => a - b);
+  return times[times.length >> 1];
+}
 
 /**
  * Hide display objects; returns an undo function, or null when there was nothing to hide. The undo function's `held`
@@ -59,10 +86,11 @@ const EXPERIMENTS = [
 ];
 
 /**
- * When a part of the canvas costs at least this much per frame, its own parts are measured too, so the report can
- * say which knob matters. Below it, the extra seconds aren't worth spending.
+ * When a part of the canvas costs at least this much per frame, or this share of the frame, its own parts are
+ * measured too, so the report can say which knob matters. Below both, the extra seconds aren't worth spending.
  */
 const BREAKDOWN_MS = 5;
+const BREAKDOWN_SHARE = 0.2;
 
 /**
  * Every light's own meshes, with the lighting layers left in place. What this saves is the part of lighting that grows
@@ -127,34 +155,47 @@ function refreshCanvas() {
 }
 
 /**
- * Run the experiments. Takes about (experiments + 2) * 3 seconds with the default windows.
+ * Run the experiments: the frame rate before and after, and the time to draw a frame with each part hidden.
  * @param {object} [options]
- * @param {number} [options.windowMs]  How long to count frames for each measurement
- * @param {number} [options.settleMs]  How long to wait after each change before counting
+ * @param {number} [options.windowMs]  How long to count frames for the frame rate before and after
+ * @param {number} [options.settleMs]  How long to wait after each change before timing
+ * @param {number} [options.samples]   Frames drawn and timed for each measurement
  * @returns {Promise<object|null>}  null without a drawn canvas
  */
-export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE_MS } = {}) {
-  if ( !canvas?.ready ) return null;
+export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE_MS, samples = SAMPLES } = {}) {
+  if ( !canvas?.ready || !canvas.app?.renderer?.gl ) return null;
   const api = game.modules.get(MODULE_ID).api;
   const ticker = canvas.app.ticker;
   const previousCap = ticker.maxFPS;
+  // The frame rate is counted uncapped (the screen's refresh rate still limits it), to show the headroom
+  const fpsUncapped = async () => {
+    ticker.maxFPS = 0;
+    try {
+      await wait(settleMs);
+      return await countFps(windowMs);
+    } finally {
+      ticker.maxFPS = previousCap;
+    }
+  };
   api.suspendIdle?.(true);
-  ticker.maxFPS = 0; // Uncapped (the display's refresh rate still limits it)
   const rows = [];
   let baseline = null;
   let baselineEnd = null;
+  let baseMs = null;
+  let baseMsEnd = null;
   try {
+    baseline = await fpsUncapped();
     await wait(settleMs);
-    baseline = await countFps(windowMs);
+    baseMs = await drawMs(samples);
     const measure = async (id, label, apply, parent) => {
       let undo = null;
       try {
         undo = apply();
         if ( !undo ) return; // Nothing of this kind on the scene
         await wait(settleMs);
-        const fps = await countFps(windowMs);
-        if ( undo.held?.() === false ) return; // Undone by something else while counting: not a measurement of it
-        rows.push({ id, label, fps, ...(parent ? { parent } : {}) });
+        const ms = await drawMs(samples);
+        if ( undo.held?.() === false ) return; // Undone by something else while timing: not a measurement of it
+        rows.push({ id, label, ms, ...(parent ? { parent } : {}) });
       } finally {
         undo?.();
       }
@@ -163,24 +204,28 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
     // Break down the parts that cost the most, so the report can say which knob to turn
     for ( const [parent, parts] of Object.entries(PARTS) ) {
       const row = rows.find(r => r.id === parent);
-      if ( !row || (frameMsSaved(baseline, row.fps) < BREAKDOWN_MS) ) continue;
+      const saved = row ? baseMs - row.ms : 0;
+      if ( (saved < BREAKDOWN_MS) && (saved < baseMs * BREAKDOWN_SHARE) ) continue;
       for ( const part of parts ) await measure(part.id, part.label, part.apply ?? (() => hide([part.object()])), parent);
     }
     await wait(settleMs);
-    baselineEnd = await countFps(windowMs);
+    baseMsEnd = await drawMs(samples);
+    baselineEnd = await fpsUncapped();
   } finally {
     ticker.maxFPS = previousCap;
     api.suspendIdle?.(false);
     refreshCanvas();
   }
-  const displayLimit = Math.max(60, ...rows.map(r => r.fps));
+  const round = v => Math.round(v * 10) / 10;
   return telemetry.frameCost = {
     measuredAt: new Date().toISOString(),
     scene: canvas.scene?.name ?? "",
     baseline,
     baselineEnd,
+    baseMs: round(baseMs),
+    baseMsEnd: round(baseMsEnd),
     // Results are only comparable if nothing else changed the load during the run
-    stable: Math.abs(baselineEnd - baseline) <= Math.max(2, baseline * 0.15),
-    rows: frameCostRows(baseline, rows, displayLimit)
+    stable: Math.abs(baseMsEnd - baseMs) <= Math.max(0.5, baseMs * 0.15),
+    rows: drawCostRows(baseMs, rows)
   };
 }

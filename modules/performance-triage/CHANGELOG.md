@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.12.0
+
+From two reports on the GM's desktop (RX 9060 XT, 1440p, 144 Hz), where the 48-light interior drew at the screen's
+refresh rate with lighting at 100% and at 50%, and every layer measured as free:
+
+- **Layer costs time the draw**: each measurement draws the canvas between two pixel read-backs, which wait for the
+  graphics card to finish, and takes the median of 15 draws. It works on a computer that keeps up with its screen,
+  where counting frames saw nothing, and isn't limited to whole frames on a slow one. Parts are broken down when a
+  layer costs 5 ms or a fifth of the frame. The frame rate before and after is still shown.
+- **Automatic lighting resolution**: a third choice for Lighting resolution. It lowers lighting a step only when this
+  computer falls below 80% of its frame cap on a scene for two 3-second checks, keeps the step only if the frame rate
+  rose by 8%, tries the sharper step again after ten minutes near the cap, and remembers each scene's step. It pauses
+  while idle-throttled, hidden or measuring, and notifies once per session. The report lists its changes.
+- **Lighting resolution confirmed in a world**: the desktop report showed both lighting layers at 50% in Foundry
+  13.351, so the setting is no longer marked experimental. What it saves on a slow computer is still to be measured.
+
 ## 0.11.0
 
 From two work PC reports of the same 48-light interior at full and 75% render scale, where lighting cost 44.8 ms and

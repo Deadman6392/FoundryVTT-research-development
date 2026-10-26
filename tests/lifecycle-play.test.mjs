@@ -117,3 +117,25 @@ test("lighting resolution lowers the lighting layers' filters, follows new scene
   canvas.effects = {};
   assert.deepEqual(api.setLightingScale(0.5), []);
 });
+
+test("Automatic lighting resolution runs its controller only while chosen", async () => {
+  const api = game.modules.get("performance-triage").api;
+  Object.assign(canvas, { ready: true, scene: { id: "s2", name: "Crypt" },
+    effects: { illumination: { filter: { resolution: null } }, coloration: { filter: { resolution: null } } } });
+  const listeners = () => env.Hooks.events.canvasReady?.length ?? 0;
+  const before = listeners();
+  await game.settings.set("performance-triage", "lightingScale", 0);
+  for ( let i = 0; (i < 100) && !api.autoLightingSummary(); i++ ) await wait(10); // its code loads on demand
+  assert.equal(api.lightingAuto, true);
+  assert.deepEqual(api.autoLightingSummary().scenes, [{ name: "Crypt", scale: 1 }], "it starts sharp on the scene in view");
+  assert.equal(listeners(), before + 1);
+  assert.equal(canvas.effects.illumination.filter.resolution, null, "full resolution means Foundry's own value");
+
+  await game.settings.set("performance-triage", "lightingScale", 0.75);
+  assert.equal(api.lightingAuto, false);
+  assert.equal(api.autoLightingSummary(), null, "stopped");
+  assert.equal(canvas.effects.illumination.filter.resolution, 0.5625, "and the fixed choice applies");
+  assert.equal(listeners(), before + 1, "one listener, the fixed choice's");
+  await game.settings.set("performance-triage", "lightingScale", 1);
+  assert.equal(listeners(), before);
+});

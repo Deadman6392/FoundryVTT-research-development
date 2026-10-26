@@ -224,6 +224,16 @@ function sections(report, opts = {}) {
     ["Soft light edges / SMAA / MSAA / mipmaps", perf ? [perf.lightSoftEdges, perf.smaa, perf.msaa, perf.mipmap].map(String).join(" / ") : "–"]
   ];
   const tables = [{ caption: "This client", head: ["", ""], rows: gpuRows }];
+  const autoChanges = cl.lightingAuto?.history ?? [];
+  if ( autoChanges.length ) {
+    tables.push({
+      caption: "Automatic lighting resolution on this computer: steps down are kept only when the frame rate rose",
+      head: ["Scene", "Minutes after loading", "Change", "Frame rate before", "After"],
+      rows: autoChanges.map(h => [h.scene || "–", Math.round(h.at / 6000) / 10,
+        `${Math.round(h.from * 100)}% → ${Math.round(h.to * 100)}%${h.kept === false ? " (undone: no faster)" : ""}`,
+        `${h.before} fps`, Number.isFinite(h.after) ? `${h.after} fps` : "–"])
+    });
+  }
   if ( cv?.ready ) {
     const s = cv.scene;
     tables.push({
@@ -254,19 +264,20 @@ function sections(report, opts = {}) {
   const fc = report.frameCost;
   if ( fc?.rows ) {
     tables.push({
-      caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseline} fps with everything visible, `
-        + `${fc.baselineEnd} fps at the end${fc.stable ? "" : "; drifted, treat as rough"})`,
-      head: ["Hidden or changed for the test", "Frame rate", "Time saved per frame"],
-      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.fps} fps`, `${r.atLimit ? "at least " : ""}${r.savedMs} ms`])
+      caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseMs} ms to draw a frame with everything `
+        + `visible, ${fc.baseMsEnd} ms at the end${fc.stable ? "" : ", so treat these as rough"}; ${fc.baseline} fps uncapped)`,
+      head: ["Hidden or changed for the test", "Time to draw a frame", "Time saved per frame"],
+      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.ms} ms`, `${r.savedMs} ms`])
     });
   }
   out.push({
     id: "canvas",
     title: "Canvas and GPU",
     intro: cv?.ready
-      ? "\"Measure layer costs\" hides each part of the canvas for a few seconds and counts frames. It takes about "
-        + "30 seconds, up to a minute when lighting or the interface cost enough to be broken down into their parts; "
-        + "the map will flicker, and nothing is saved or changed for anyone else."
+      ? "\"Measure layer costs\" hides each part of the canvas for a moment and times how long a frame takes to "
+        + "draw, waiting for the graphics card to finish each one, so it works whatever the frame cap or the screen's "
+        + "refresh rate. It takes about 30 seconds, longer when lighting or the interface cost enough to be broken "
+        + "down into their parts; the map will flicker, and nothing is saved or changed for anyone else."
       : "",
     tables,
     actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (30 to 60 s)"],
@@ -358,7 +369,7 @@ function sections(report, opts = {}) {
 
 /** "50% (illumination 50%, light colours 50%)", or what the setting asked for when the layers weren't read. */
 function lightingResolution(cl) {
-  const asked = `${Math.round((cl.lightingScale ?? 1) * 100)}%`;
+  const asked = `${cl.lightingAuto ? "Automatic, now " : ""}${Math.round((cl.lightingScale ?? 1) * 100)}%`;
   const actual = cl.lightingResolution;
   if ( !actual ) return asked;
   const parts = Object.entries(actual).map(([k, v]) => `${k === "coloration" ? "light colours" : k} ${Math.round(v * 100)}%`);
