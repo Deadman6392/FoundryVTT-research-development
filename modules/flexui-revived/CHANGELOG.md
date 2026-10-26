@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- The manifest now names v13 as its verified version. Sqyre refused to install 0.1.0 ("Install failed due to a
+  problem with the manifest") while Foundry's own installer accepted the files; a missing verified version is the
+  likely reason, since Sqyre sorts modules by it. The module itself is unchanged and still hasn't been confirmed in a
+  world.
+- Dropped the optional `license` manifest field; LICENSE.md still ships in the zip.
+
 ## 0.1.0
 
 First release of the rewrite of iotech's FlexUI 0.3.0 for Foundry v13. Not yet run in a Foundry world.

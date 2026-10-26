@@ -7,9 +7,11 @@ On v13 the original wrecks the interface, because its stylesheets set the layout
 that shape ([issue #20](https://github.com/iotech-fvtt/flexui/issues/20)). This is a rewrite, not a patch: none of
 the original's selectors survive, but the themes, their palettes, the image names and the settings are carried over.
 
-**Status: 0.1.0, not yet run in a Foundry world.** The stylesheet targets v13's markup as documented by Foundry's type
-definitions and by maintained v13 interface modules, and it was checked on a static model of the v13 interface in
-Chromium, but no one has loaded it in Foundry yet. See [Trying it out](#trying-it-out) before using it at the table.
+**Status: 0.1.1, not yet confirmed in a Foundry world.** The stylesheet targets v13's markup as documented by Foundry's
+type definitions and by maintained v13 interface modules, and it was checked on a static model of the v13 interface in
+Chromium, but no one has used it in Foundry yet. The manifest says it is verified for v13 only because hosting
+services such as Sqyre refuse to install a module without a verified version. See [Trying it out](#trying-it-out)
+before using it at the table.
 
 ## What it restores
 
@@ -112,7 +114,7 @@ your table (step 3 below).
 
 - It hasn't run in Foundry yet (see the status note). Some selectors may need adjusting after the first real test.
 - Foundry v14 is expected to mostly work (the stylesheet also targets v14's renamed roll-mode buttons), but nothing
-  has been checked on v14 and `compatibility.verified` is unset.
+  has been checked on v14.
 - Sidebar tabs a module adds keep their Font Awesome icon (in the theme's colours); only core tabs have artwork.
 - It doesn't theme the inside of sheets and other windows; systems style those.
 - Text inside chat messages that hard-codes a light colour (some modules' cards) may be hard to read on parchment.
@@ -131,7 +133,7 @@ it, and check, with the original FlexUI installed but inactive and then with *Ar
 6. Changing *My theme* as a player and *Table default theme* as the GM switches without a reload.
 7. Activate the original FlexUI too, reload: the interface stays intact and the GM gets the warning.
 
-Once it holds up, set `"verified": "13"` in `module.json`.
+If something looks wrong, a screenshot and the Foundry version are enough to fix it.
 
 ## Your own tweaks
 
