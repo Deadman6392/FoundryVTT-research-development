@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.0
+
+From two work PC reports (Intel HD 4600) zoomed in on the 48-light interior, where lighting cost 51.5 ms of a 74 ms
+frame and Lighting resolution at 50% took the frame rate from 15 to 23 with no visible difference:
+
+- **Automatic lighting resolution in the profiles**: Balanced, Low and Minimum set Lighting resolution to Automatic.
+  On the work PC, Automatic reached 50% by itself in two steps (15, 18.7, 23.9 fps); on a computer that keeps up it
+  changes nothing. A profile's setting now takes effect on the load that applies it.
+- **A 25% step**, as a fixed choice and as Automatic's last step, for computers still behind at 50%. It softens light
+  edges at walls; like every automatic step, it is kept only if the frame rate rose.
+- **Layer costs timed in pairs**: each part is drawn with and without the change alternately and the saving is the
+  median of the pairs, so a computer that slows down during the test no longer shows parts costing minus 6 to 7 ms,
+  as one work PC run did. Half-resolution lighting is now tried from whatever resolution is in use, down to 25%.
+- **Stutter counts leave out measurements**: the long frames a layer cost measurement draws are no longer counted as
+  play, so the report's stutters a minute reflect the session.
+- The report notes that lighting costs more zoomed in, and shows "none measured" instead of a negative saving.
+
 ## 0.12.0
 
 From two reports on the GM's desktop (RX 9060 XT, 1440p, 144 Hz), where the 48-light interior drew at the screen's

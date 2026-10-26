@@ -100,3 +100,13 @@ test("the controller counts frames on the canvas, applies its steps, and stops c
   assert.equal(env.Hooks.events.canvasReady?.length ?? 0, 0, "and the scene listener");
   assert.equal(autoLightingSummary(), null);
 });
+
+test("when 50% isn't enough, a 25% step is tried and kept only if it helps", () => {
+  const auto = new AutoLighting();
+  auto.setScene("castle", "Castle");
+  // Each step helps a little, and 50% still falls behind the cap
+  const changes = feed(auto, [0, 12, 12, 16, 16, 16, 20, 20, 20, 26], 30, 0);
+  assert.deepEqual(changes.filter(Boolean).map(c => c.scale), [0.75, 0.5, 0.25]);
+  assert.equal(auto.scale, 0.25);
+  assert.equal(auto.summary().history.at(-1).after, 26);
+});

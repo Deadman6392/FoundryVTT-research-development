@@ -8,6 +8,13 @@
 
 export const PROFILE_IDS = ["none", "balanced", "low", "minimum", "nocanvas"];
 
+/**
+ * Lighting resolution on Automatic: full resolution until the computer falls behind its frame cap on a scene, then
+ * lower a step at a time, each kept only if the frame rate rose. On the work PC it went to 50% on a 48-light
+ * interior, 15 to 24 fps, with no visible difference; on a computer that keeps up it never changes anything.
+ */
+const LIGHTING_AUTO = 0;
+
 const LOW_SETTINGS = {
   "core.performanceMode": 0,
   "core.maxFPS": 30,
@@ -17,7 +24,8 @@ const LOW_SETTINGS = {
   "tokenmagic.disableAnimations": true,
   // Draws Sequencer's above-interface effects in the canvas instead of a second full-window canvas over the UI
   // (Sequencer's own hint warns of "a significant performance hit"); read in its init hook, so it needs a reload
-  "sequencer.enable-above-ui-screenspace": false
+  "sequencer.enable-above-ui-screenspace": false,
+  "performance-triage.lightingScale": LIGHTING_AUTO
 };
 
 export const PROFILES = {
@@ -30,7 +38,8 @@ export const PROFILES = {
   balanced: {
     id: "balanced",
     settings: {
-      "core.performanceMode": 1
+      "core.performanceMode": 1,
+      "performance-triage.lightingScale": LIGHTING_AUTO
     },
     chatBatchSize: 50,
     idle: { fps: 20, delay: 30, onBlur: true }

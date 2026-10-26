@@ -7,11 +7,11 @@
       },
       "balanced": {
         "Name": "Balanced",
-        "Hint": "Medium canvas quality (which also halves FXMaster weather particles), fewer chat messages rendered at startup, and a lower frame rate while idle or unfocused. Barely visible on a decent machine."
+        "Hint": "Medium canvas quality (which also halves FXMaster weather particles), automatic lighting resolution (lights are drawn at fewer pixels only if this computer falls behind), fewer chat messages rendered at startup, and a lower frame rate while idle or unfocused. Barely visible on a decent machine."
       },
       "low": {
         "Name": "Low",
-        "Hint": "Low canvas quality (FXMaster weather at a quarter of its particles), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map instead of a second canvas, and aggressive idle throttling. For integrated graphics and older laptops."
+        "Hint": "Low canvas quality (FXMaster weather at a quarter of its particles), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map instead of a second canvas, automatic lighting resolution, and aggressive idle throttling. For integrated graphics and older laptops."
       },
       "minimum": {
         "Name": "Minimum",
@@ -38,7 +38,7 @@
       },
       "LightingScale": {
         "Name": "Lighting resolution (this computer)",
-        "Hint": "Draw light and light colours at fewer pixels than the rest of the map. Lights cost per pixel they cover, every frame, even when nothing animates; their glow is a smooth gradient, so it survives being drawn smaller. Light edges at walls get softer; the map, tokens and the interface stay sharp. Automatic keeps full resolution until this computer falls behind its frame cap on a scene, then lowers it a step at a time, keeps a step only if the frame rate actually rose, and tries the sharper step again later. Takes effect straight away.",
+        "Hint": "Draw light and light colours at fewer pixels than the rest of the map. Lights cost per pixel they cover, every frame, even when nothing animates, and more the further you zoom in; their glow is a smooth gradient, so it survives being drawn smaller. 50% looked no different on a 48-light interior; 25% softens light edges at walls. The map, tokens and interface stay sharp. Automatic keeps full resolution until this computer falls behind its frame cap on a scene, then lowers it a step at a time, keeps a step only if the frame rate actually rose, and tries the sharper step again later. Takes effect straight away.",
         "Auto": "Automatic"
       },
       "TrackPlay": {

@@ -192,6 +192,14 @@ for 56% of the pixels. The cost follows pixels almost exactly, so it is the grap
 light covers, once per lighting layer, on every frame. That is why Low performance mode doesn't help a plain orange
 torch: Low stops lights animating, but a still light is drawn again on every frame just the same.
 
+It is also why zooming in makes it worse: zoomed out over a whole floor, the scene fills part of the screen and much
+of it is dark; zoomed in on a token in a lit hall, every pixel on screen is inside several lights. The GM measured 18
+fps zoomed all the way out and 13 fps zoomed in. Players usually sit zoomed in on their own token, so that is where to
+measure. Zoomed in, with Lighting resolution at 100%, timing each frame's draw put lighting at 51.5 ms of 74: 43.6 ms
+of it the lights themselves (the rest is each layer's fixed work), and drawing it at half resolution saved 32.4 ms.
+At 50% the frame took 40 ms and the frame rate went from 15 to 23, with no difference the GM could see in the lights.
+On Automatic it got there by itself in two steps.
+
 So what counts is the area lights cover on screen and how many overlap there, not how many lights there are. Twenty
 sconces in separate rooms, each clipped by its walls, draw each room once; three lights whose radii all reach across
 one hall draw that hall three times. In practice:
@@ -257,8 +265,8 @@ module settings.
 
 | Profile | For | Changes |
 | --- | --- | --- |
-| Balanced | Mid-range machines that are mostly fine | Medium performance mode (FXMaster weather at half its particles), 50 chat messages rendered at startup, 20 fps while idle or unfocused |
-| Low | Integrated graphics, older laptops | Low performance mode (weather at a quarter), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map, 25 chat messages at startup, 10 fps after 15 s idle |
+| Balanced | Mid-range machines that are mostly fine | Medium performance mode (FXMaster weather at half its particles), Lighting resolution on Automatic, 50 chat messages rendered at startup, 20 fps while idle or unfocused |
+| Low | Integrated graphics, older laptops | Low performance mode (weather at a quarter), 30 fps cap, no high-DPI rendering, no light or vision animation, no animated Token Magic FX filters, Sequencer's above-interface effects drawn in the map, Lighting resolution on Automatic, 25 chat messages at startup, 10 fps after 15 s idle |
 | Minimum | Machines that struggle to show the map at all | Low, plus 20 fps cap, no mipmaps, no token drag preview, no chat bubbles or scrolling status text, no Sequencer effects, no FXMaster weather, no Aura Effects radius drawings, 15 chat messages at startup, 10 fps after 5 s idle |
 | Theater of the Mind | Machines that cannot draw the map | Turns the game canvas off; sheets, chat and rolls still work |
 

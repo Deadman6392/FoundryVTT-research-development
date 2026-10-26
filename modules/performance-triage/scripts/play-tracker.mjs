@@ -31,7 +31,8 @@ function targetFps() {
 
 /**
  * @param {object} options
- * @param {() => boolean} options.isThrottled  Whether the idle throttle has lowered the frame cap
+ * @param {() => boolean} options.isThrottled  Whether the frame rate isn't the scene's own right now (the idle throttle
+ *                                             has lowered it, or a measurement is drawing extra frames)
  * @param {number} [options.windowMs]          Length of each measured stretch
  * @param {number} [options.moveWindowMs]      How long after a move's animation its effects are still counted
  * @param {number} [options.graceMs]           Extra wait for long frame entries after a move's window
@@ -107,7 +108,10 @@ export function startPlayTracker({ isThrottled, windowMs = WINDOW_MS, moveWindow
   const hooks = [["canvasReady", Hooks.on("canvasReady", onScene)], ["moveToken", Hooks.on("moveToken", onMove)]];
   document.addEventListener("visibilitychange", onVisibility);
   globalThis.addEventListener?.("pagehide", save);
-  telemetry.onPlayFrame = e => stats.addLongFrame(e);
+  // Long frames from a measurement's own draws, or while throttled, aren't play
+  telemetry.onPlayFrame = e => {
+    if ( !isThrottled() ) stats.addLongFrame(e);
+  };
   if ( canvas?.ready ) onScene();
 
   tracker = {

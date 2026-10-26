@@ -5,8 +5,11 @@
  * Pure decision logic with no Foundry globals, so every path can be tested in Node.
  */
 
-/** Lighting resolution steps, sharpest first. */
-export const STEPS = [1, 0.75, 0.5];
+/**
+ * Lighting resolution steps, sharpest first. 50% looked no different from full on the work PC; 25% is there for when
+ * 50% isn't enough, and like every step it is kept only if the frame rate rose.
+ */
+export const STEPS = [1, 0.75, 0.5, 0.25];
 
 /** Frames are counted over windows this long. */
 export const WINDOW_MS = 3000;

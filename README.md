@@ -4,7 +4,7 @@ Foundry VTT modules focused on making a heavy dnd5e table run well on every play
 
 | Module | What it does | Status |
 | --- | --- | --- |
-| [Performance Triage](modules/performance-triage) | Measures what slows each client down (load, files per module, stutters, hook costs, GPU memory, world bloat) and lets the GM give weak computers a lighter client profile. | 0.12.0, Foundry v13 |
+| [Performance Triage](modules/performance-triage) | Measures what slows each client down (load, files per module, stutters, hook costs, GPU memory, world bloat) and lets the GM give weak computers a lighter client profile. | 0.13.0, Foundry v13 |
 
 ## Guides
 

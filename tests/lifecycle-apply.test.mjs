@@ -15,6 +15,9 @@ env.settings.world.set(`${MODULE}.assignments`, { player1: "low" });
 env.localStorage.setItem("core.maxFPS", "60");        // The player had explicitly saved 60
 env.localStorage.setItem(`${MODULE}.shareSummary`, "false"); // Keep the test from waiting on FPS sampling
 
+// The canvas ticker takes listeners (automatic lighting resolution counts frames on it)
+Object.assign(env.ticker, { add() {}, remove() {} });
+
 await import("../modules/performance-triage/scripts/main.mjs");
 const api = () => game.modules.get(MODULE).api;
 const flush = () => new Promise(r => setTimeout(r, 0));
@@ -38,6 +41,7 @@ test("setup writes profile values to client storage before the canvas exists", a
   assert.equal(env.localStorage.getItem("core.pixelRatioResolutionScaling"), "false");
   assert.equal(env.localStorage.getItem("core.lightAnimation"), "false");
   assert.equal(env.localStorage.getItem("tokenmagic.disableAnimations"), "true");
+  assert.equal(env.localStorage.getItem(`${MODULE}.lightingScale`), "0", "Lighting resolution on Automatic");
   assert.equal(game.settings.get("core", "maxFPS"), 30);
 
   const backup = game.settings.get(MODULE, "backup");
@@ -55,6 +59,13 @@ test("ready prompts for a reload because a third-party setting needs one, and st
   assert.ok(idle, "idle throttle running");
   assert.equal(idle.idleFps, 10);
   assert.equal(idle.delaySeconds, 15);
+});
+
+test("the profile's Automatic lighting resolution takes effect on the load that applied it", async () => {
+  // Setup wrote it to storage after init had read the old value; ready picks it up
+  for ( let i = 0; (i < 100) && !api().autoLightingSummary(); i++ ) await new Promise(r => setTimeout(r, 10));
+  assert.equal(api().lightingAuto, true);
+  assert.ok(api().autoLightingSummary(), "its controller is running");
 });
 
 test("idle throttle lowers and restores the ticker frame cap", async () => {

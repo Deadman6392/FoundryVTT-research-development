@@ -69,8 +69,12 @@ const realNow = performance.now.bind(performance);
 let drawnMs = 0;
 performance.now = () => realNow() + drawnMs;
 let readBacks = 0;
+// A computer that gets steadily slower while it is measured (another program starting, a graphics card clocking down)
+let drift = 0;
+let driftPerDraw = 0;
 canvas.app.render = () => {
-  drawnMs += frameTime();
+  drawnMs += frameTime() + drift;
+  drift += driftPerDraw;
 };
 canvas.app.renderer.gl = { RGBA: 0x1908, UNSIGNED_BYTE: 0x1401, readPixels: () => readBacks++ };
 
@@ -169,5 +173,22 @@ test("a part Foundry shows again while it is being counted isn't reported", { ti
     assert.ok(!result.rows.some(r => r.id === "lightMeshes"), "no row for a hide that didn't hold");
   } finally {
     lighting.lightSources = saved;
+  }
+});
+
+test("a computer slowing down during the test doesn't skew what each part costs", { timeout: 60_000 }, async () => {
+  Object.defineProperty(canvas, "effects", { configurable: true, writable: true, value: lighting });
+  driftPerDraw = 0.05; // Over the test's draws, frames end up several ms slower than they started
+  try {
+    const result = await measureFrameCost({ windowMs: 400, settleMs: 50, samples: 5 });
+    const by = Object.fromEntries(result.rows.map(r => [r.id, r]));
+    assert.ok(result.baseMsEnd - result.baseMs > 5, `drifted ${result.baseMs} -> ${result.baseMsEnd}`);
+    // Each part is timed against draws right next to it, so the drift cancels out
+    for ( const [id, ms] of [["tiles", 5], ["tokenFilters", 10], ["screenFilters", 15], ["interface", 1]] ) {
+      assert.ok(Math.abs(by[id].savedMs - ms) <= 0.3, `${id}: ${by[id].savedMs} ms, expected ${ms}`);
+    }
+  } finally {
+    driftPerDraw = 0;
+    drift = 0;
   }
 });
