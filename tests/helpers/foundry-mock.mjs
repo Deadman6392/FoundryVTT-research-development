@@ -100,6 +100,13 @@ class MockSettings {
   }
 }
 
+/** Foundry's getRoute: an absolute path that includes the server's URL prefix (globalThis.ROUTE_PREFIX) if set. */
+function getRoute(path, { prefix } = {}) {
+  prefix = (prefix === undefined) ? globalThis.ROUTE_PREFIX : (prefix || null);
+  path = path.replace(/(^\/+)|(\/+$)/g, "");
+  return `/${prefix ? `${prefix}/${path}` : path}`;
+}
+
 function expandObject(obj) {
   const out = {};
   for ( const [k, v] of Object.entries(obj) ) {
@@ -168,7 +175,7 @@ export function installFoundry({ userId = "player1", role = 1, activeModules = [
         },
         sidebar: { apps: { SupportDetails: { getWebGLRendererInfo: () => "Mock GPU" } } }
       },
-      utils: { debouncedReload: () => reloads.count++, expandObject, saveDataToFile() {} },
+      utils: { debouncedReload: () => reloads.count++, expandObject, getRoute, saveDataToFile() {} },
       canvas: { animation: { CanvasAnimation: { animations: {} } }, TextureLoader: { approximateTotalMemoryUsage: 0 } }
     },
     game: {
