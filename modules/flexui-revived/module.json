@@ -1,0 +1,31 @@
+{
+  "id": "flexui-revived",
+  "title": "FlexUI Revived",
+  "description": "The FlexUI themes (Fantasy, Sci-Fi, Stone and Classic FantasyUI) rebuilt for Foundry v13's interface: themed sidebar tabs and panel, parchment chat, folders as buttons, scene controls, navigation, hotbar and players list. Switches live without reloads, lets the GM set a table default with per-player choice, and per-area toggles for working alongside other UI modules. Ships no artwork: uses the original FlexUI's images from an installed copy, your own folder, or CSS textures. Based on FlexUI by iotech.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "Deadman6392"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13"
+  },
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://github.com/Deadman6392/FoundryVTT-research-development",
+  "manifest": "https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/flexui-revived/module.json",
+  "download": "https://github.com/Deadman6392/FoundryVTT-research-development/releases/download/flexui-revived-v0.1.0/flexui-revived.zip",
+  "bugs": "https://github.com/Deadman6392/FoundryVTT-research-development/issues",
+  "changelog": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/flexui-revived/CHANGELOG.md",
+  "readme": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/flexui-revived/README.md",
+  "license": "LICENSE.md"
+}
