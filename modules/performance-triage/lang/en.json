@@ -73,7 +73,7 @@
     "Notify": {
       "Applied": "Performance profile {profile} applied.",
       "ProfilerActive": "Performance Triage: the hook profiler is active on this client and adds a small overhead. Disable it from the performance report when you are done.",
-      "LightingLowered": "This computer was falling behind on this scene, so Performance Triage draws lights at {scale}% resolution here. Lighting resolution in this module's settings controls it."
+      "LightingLowered": "This computer was falling behind on this scene, so Performance Triage now draws lights at {scale}% resolution here. It may step lower or back up as the frame rate changes; the report lists every step. Lighting resolution in this module's settings controls it."
     },
     "Report": {
       "Title": "Performance Triage",

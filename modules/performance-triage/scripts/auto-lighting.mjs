@@ -1,6 +1,7 @@
 /**
  * Runs automatic lighting resolution on this computer. Loaded only while the Lighting resolution setting is on
- * Automatic. Cost while on: one increment per rendered frame, a check every 3 seconds, and a canvasReady listener.
+ * Automatic. Cost while on: a timestamp and an increment per rendered frame, a check every 3 seconds, and a
+ * canvasReady listener.
  */
 import { AutoLighting, WINDOW_MS } from "./lib/auto-lighting.mjs";
 
@@ -19,9 +20,17 @@ export function startAutoLighting({ apply, isPaused, windowMs = WINDOW_MS }) {
   const auto = new AutoLighting();
   let frames = 0;
   let windowStart = performance.now();
+  let lastFrame = 0;
+  let longestFrame = 0;
   let ticker = null;
   let notified = false;
-  const count = () => frames++;
+  // The longest gap between frames shows a stall in the window; one subtraction and comparison per frame
+  const count = () => {
+    const now = performance.now();
+    if ( lastFrame && ((now - lastFrame) > longestFrame) ) longestFrame = now - lastFrame;
+    lastFrame = now;
+    frames++;
+  };
 
   const onScene = () => {
     ticker?.remove(count);
@@ -29,6 +38,7 @@ export function startAutoLighting({ apply, isPaused, windowMs = WINDOW_MS }) {
     ticker?.add(count);
     frames = 0;
     windowStart = performance.now();
+    lastFrame = longestFrame = 0;
     if ( !canvas.scene ) return;
     apply(auto.setScene(canvas.scene.id, canvas.scene.name));
   };
@@ -37,15 +47,18 @@ export function startAutoLighting({ apply, isPaused, windowMs = WINDOW_MS }) {
     const now = performance.now();
     const ms = now - windowStart;
     const counted = frames;
+    // A freeze still going on at the check counts too
+    const longest = Math.max(longestFrame, lastFrame ? now - lastFrame : 0);
     frames = 0;
+    longestFrame = 0;
     windowStart = now;
     // Hidden tabs don't draw, and a throttled or measured canvas isn't running at the scene's own pace
     if ( !canvas?.ready || document.hidden || isPaused() || !(ms > 0) ) return;
     const target = canvas.app.ticker.maxFPS || 60;
-    const change = auto.addWindow((counted * 1000) / ms, target, now);
+    const change = auto.addWindow((counted * 1000) / ms, target, now, longest);
     if ( !change ) return;
     apply(change.scale);
-    // Once a session, so whoever is at this computer knows why lights look softer
+    // Once a session, so whoever is at this computer knows why lights look softer; the report lists every step
     if ( (change.reason === "slow") && !notified ) {
       notified = true;
       ui.notifications?.info(game.i18n.format("PTRIAGE.Notify.LightingLowered", { scale: Math.round(change.scale * 100) }));

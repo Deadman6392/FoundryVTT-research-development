@@ -97,7 +97,9 @@ below 80% of its frame cap on a scene for two 3-second checks in a row, then low
 only if the frame rate rose by 8% or more (when it doesn't, lighting wasn't the bottleneck and it goes back), tries
 the sharper step again after the frame rate has held near the cap and ten minutes have passed, and remembers each
 scene's step for the session. It pauses while the idle throttle is lowering the frame rate, while the tab is hidden,
-and while a measurement runs, and says once per session when it first lowers lighting. On the work PC it went from
+and while a measurement runs, and ignores checks that contain a stall (a frame over 400 ms, such as the page finishing
+loading or a module's long hook), which lighting can't fix. It says once per session when it first lowers lighting;
+the report lists every step with the frame rate before and after. On the work PC it went from
 100% to 75% (15 to 18.7 fps) and then 50% (23.9 fps) within ten seconds of falling behind. The Balanced, Low and
 Minimum profiles set it, so a computer the GM assigns one of them gets it without anyone opening a setting.
 

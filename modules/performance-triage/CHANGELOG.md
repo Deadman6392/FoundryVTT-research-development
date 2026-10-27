@@ -15,6 +15,14 @@ frame and Lighting resolution at 50% took the frame rate from 15 to 23 with no v
   as one work PC run did. Half-resolution lighting is now tried from whatever resolution is in use, down to 25%.
 - **Stutter counts leave out measurements**: the long frames a layer cost measurement draws are no longer counted as
   play, so the report's stutters a minute reflect the session.
+- **Automatic ignores stalls**: a 3-second check with a frame over 400 ms (and three times the average frame) neither
+  triggers a step nor judges one. On a 0.12 work PC load, the first step came seconds after a 5.6 s load freeze, at
+  "6.9 fps", and was judged a success when loading ended. Lighting resolution can't fix a stall, so stalls no longer
+  count either way.
+- The notification says Automatic may step lower or back up, and that the report lists every step; it still appears
+  once per session.
+- The report and scene planner styles sit in Foundry's `modules` cascade layer, as the repository now requires, so
+  themes such as FlexUI Revived aren't fought by unlayered CSS.
 - The report notes that lighting costs more zoomed in, and shows "none measured" instead of a negative saving.
 
 ## 0.12.0
