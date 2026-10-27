@@ -1,0 +1,31 @@
+{
+  "id": "flexui-revived",
+  "title": "FlexUI Revived",
+  "description": "Themes for Foundry v13's interface: textured sidebar and controls, glowing tab icons, parchment chat, display fonts and optional slow ambient motion. Ten themes, from the four FlexUI originals (Fantasy, Sci-Fi, Stone, Classic FantasyUI) to Gothic Horror, Cosmic Horror, Neon Noir, Infernal, Frostbound and Faerie Wood. Every icon, texture and font is bundled under a free license. Live switching, a GM table default with per-player choice, per-area toggles, and styles that always yield to other modules. Began as a rewrite of FlexUI by iotech.",
+  "version": "0.2.0",
+  "authors": [
+    {
+      "name": "Deadman6392"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://github.com/Deadman6392/FoundryVTT-research-development",
+  "manifest": "https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/flexui-revived/module.json",
+  "download": "https://github.com/Deadman6392/FoundryVTT-research-development/releases/download/flexui-revived-v0.2.0/flexui-revived.zip",
+  "bugs": "https://github.com/Deadman6392/FoundryVTT-research-development/issues",
+  "changelog": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/flexui-revived/CHANGELOG.md",
+  "readme": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/flexui-revived/README.md"
+}

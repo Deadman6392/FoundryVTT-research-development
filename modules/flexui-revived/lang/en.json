@@ -1,0 +1,134 @@
+{
+  "FLEXUI": {
+    "Theme": {
+      "fantasy": "Fantasy",
+      "scifi": "Sci-Fi",
+      "stone": "Stone",
+      "classic": "Classic FantasyUI",
+      "gothic": "Gothic Horror",
+      "cosmic": "Cosmic Horror",
+      "neon": "Neon Noir",
+      "infernal": "Infernal",
+      "frost": "Frostbound",
+      "fey": "Faerie Wood"
+    },
+    "Settings": {
+      "Theme": {
+        "Name": "My theme",
+        "Hint": "The theme on this computer. \"Table default\" follows the GM's choice; \"Off\" shows Foundry's own interface. Changes apply immediately.",
+        "Default": "Table default",
+        "Off": "Off (Foundry's own look)"
+      },
+      "Size": {
+        "Name": "Sidebar tab size",
+        "Hint": "Large uses 40 px tab icons like the original FlexUI; compact keeps the tabs close to Foundry's own size.",
+        "compact": "Compact",
+        "large": "Large"
+      },
+      "Font": {
+        "Name": "Directory text size",
+        "Hint": "Text size and row height in the Actors, Items, Journal and other sidebar lists.",
+        "small": "Small",
+        "medium": "Medium",
+        "large": "Large"
+      },
+      "Lightweight": {
+        "Name": "Lightweight textures",
+        "Hint": "Draw the sidebar panel and chat paper with CSS instead of images. The bundled textures are small (under 70 KB each); this matters mostly when the GM uses a custom folder with large images."
+      },
+      "Areas": {
+        "Name": "Styled areas",
+        "Label": "Choose areas",
+        "Hint": "Pick which parts of the interface FlexUI Revived styles on this computer, for example to leave the chat to another module."
+      },
+      "DefaultTheme": {
+        "Name": "Table default theme",
+        "Hint": "The theme for every player who leaves \"My theme\" on \"Table default\"."
+      },
+      "CustomArt": {
+        "Name": "Custom artwork",
+        "Label": "Choose folder",
+        "Hint": "A folder of your own images named after the parts they replace (icon_chat.webp, panel_texture.png, ...). Used when Artwork is set to Custom folder."
+      },
+      "Fonts": {
+        "Name": "Themed fonts",
+        "Hint": "Use each theme's display font for speaker names, folder and scene names and headings (never for body text). Off keeps Foundry's fonts."
+      },
+      "Motion": {
+        "Name": "Ambient motion",
+        "Hint": "Slowly drifting panel textures and particles and a breathing or flickering glow on the active tab. Changes at most twice a second so the browser can rest between steps, but it is still extra drawing: leave it off on weak computers. Always off if your system asks for reduced motion."
+      },
+      "Artwork": {
+        "Name": "Artwork",
+        "Hint": "Bundled uses the free icons and textures that ship with the module. Custom folder uses the images chosen under \"Custom artwork\" and fills any gaps from the bundled set. None draws everything with CSS and keeps Foundry's own tab icons.",
+        "bundled": "Bundled",
+        "custom": "Custom folder",
+        "none": "None (CSS textures, Foundry's icons)"
+      }
+    },
+    "Chat": {
+      "Whisper": "(Whisper)",
+      "Blind": "(Blind)"
+    },
+    "Notify": {
+      "OriginalActive": "The original FlexUI module is active. It was made for Foundry v11 and breaks this version's interface, so FlexUI Revived switched its stylesheets off for this session. Deactivate it in Manage Modules; FlexUI Revived doesn't need it."
+    },
+    "Areas": {
+      "Title": "FlexUI Revived: styled areas",
+      "Intro": "Unticked areas keep Foundry's (or another module's) look on this computer.",
+      "Save": "Save",
+      "tabs": {
+        "Name": "Sidebar tabs",
+        "Hint": "The tab buttons on the right edge, with the theme's icons."
+      },
+      "panel": {
+        "Name": "Sidebar panel",
+        "Hint": "The background and frame behind the sidebar's contents."
+      },
+      "chat": {
+        "Name": "Chat",
+        "Hint": "Parchment chat messages, speaker names, whisper and blind labels, the message box and roll mode buttons."
+      },
+      "directories": {
+        "Name": "Directories",
+        "Hint": "Search boxes, create buttons, folders, settings tab buttons and directory text size."
+      },
+      "combat": {
+        "Name": "Combat tracker",
+        "Hint": "Begin and end combat buttons and the active combatant highlight."
+      },
+      "controls": {
+        "Name": "Scene controls",
+        "Hint": "The layer and tool buttons on the left."
+      },
+      "navigation": {
+        "Name": "Scene navigation",
+        "Hint": "The scene buttons along the top."
+      },
+      "hotbar": {
+        "Name": "Macro hotbar",
+        "Hint": "Hotbar slots and their buttons."
+      },
+      "players": {
+        "Name": "Players list",
+        "Hint": "The list of connected players."
+      },
+      "windows": {
+        "Name": "Window title bars",
+        "Hint": "Title bars of sheets and other windows. Off by default because many systems and modules style their own."
+      }
+    },
+    "CustomArt": {
+      "Title": "FlexUI Revived: custom artwork",
+      "Intro": "Choose a folder in your Foundry data containing any of the images below, named the same way (any of webp, png, jpg, avif, gif or svg). Each image found replaces that part of every theme; anything missing comes from the bundled artwork. Icons are shown in full color; panel_texture and parchment repeat as textures; main_panel is stretched around the sidebar as a frame.",
+      "Folder": "Folder",
+      "FolderHint": "Folders in your user data only. S3 buckets and other file sources are not listed.",
+      "Found": "{found} of {total} images found:",
+      "NotSelected": "Set Artwork to \"Custom folder\" in the module settings to use these images.",
+      "Scan": "Scan folder and save",
+      "Clear": "Clear",
+      "ReadFailed": "Could not read {folder}: {error}",
+      "Saved": "Custom artwork saved: {found} of {total} images found."
+    }
+  }
+}
