@@ -232,7 +232,8 @@ async function scheduleEnd(deck) {
 
 async function onTrackEnding(deck, end) {
   if ( state.deck !== deck ) return;
-  const next = deck.autoNext ? nextSound(deck) : null;
+  const L = await loadLogic();
+  const next = deck.autoNext ? nextSound(deck, L) : null;
   if ( !next ) {
     // Let it finish, then park the deck at the top of the track
     state.endTimer = setTimeout(() => {
@@ -240,21 +241,19 @@ async function onTrackEnding(deck, end) {
     }, Math.max(0, end - game.time.serverTime) + 200);
     return;
   }
-  await update((current, L, now) => {
-    const track = trackFor(L, next);
-    const arr = L.deck.trackArrangement(track);
-    const parked = L.transport.stopped(arr, now, current.transport.rate);
+  await update((current, logic, now) => {
+    const track = trackFor(logic, next);
+    const arr = logic.deck.trackArrangement(track);
+    const parked = logic.transport.stopped(arr, now, current.transport.rate);
     return { ...current, track, transport: { ...parked, status: "playing", at: Math.max(end, now + LEAD_MS) } };
   });
 }
 
 /** The sound after the deck's current one in its playlist's play order, unless the playlist is a soundboard. */
-function nextSound(deck) {
+function nextSound(deck, L) {
   const playlist = game.playlists.get(deck.track.playlist);
   if ( !playlist || (playlist.mode === CONST.PLAYLIST_MODES.DISABLED) ) return null;
-  const order = playlist.playbackOrder ?? [];
-  const i = order.indexOf(deck.track.sound);
-  const id = (i + 1 < order.length) ? order[i + 1] : (deck.loopQueue ? order[0] : null);
+  const id = L.deck.nextInOrder(playlist.playbackOrder ?? [], deck.track.sound, deck.loopQueue);
   const sound = id ? playlist.sounds.get(id) : null;
   return sound ? { sound, playlist } : null;
 }

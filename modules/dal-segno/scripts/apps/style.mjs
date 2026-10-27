@@ -74,6 +74,7 @@ const CSS = `
   .dal-segno-editor td input[type="number"] { width: 5.5rem; }
   .dal-segno-editor td input[type="text"] { width: 100%; }
   .dal-segno-editor tr.dsg-selected td { background: color-mix(in srgb, var(--dsg-accent) 18%, transparent); }
+  .dal-segno-editor .dsg-actions { flex-wrap: wrap; }
   .dal-segno-editor .dsg-actions button { width: auto; flex: 0 0 auto; padding: 0 0.5rem; }
   .dal-segno-editor footer { display: flex; gap: 0.4rem; }
 

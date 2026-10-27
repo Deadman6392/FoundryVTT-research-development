@@ -381,10 +381,11 @@ export class EditorApp extends ApplicationV2 {
     return (this.selected.edge === "start") ? s.start : this.#end(s);
   }
 
-  /** Move the selected marker, keeping its section at least 50 ms long and inside the file. */
-  #setMarker(time) {
+  /** Move the selected marker to the millisecond, keeping its section at least 50 ms long and inside the file. */
+  #setMarker(raw) {
     const s = this.sections[this.selected.index];
     if ( !s ) return;
+    const time = Math.round(raw * 1000) / 1000;
     const limit = this.duration ?? Infinity;
     if ( this.selected.edge === "start" ) s.start = Math.max(0, Math.min(time, this.#end(s) - 0.05));
     else {

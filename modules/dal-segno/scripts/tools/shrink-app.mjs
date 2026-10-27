@@ -70,8 +70,6 @@ export class ShrinkApp extends ApplicationV2 {
     const busy = this.progress !== null;
     const v = this.values;
     const info = this.info;
-    const kept = info?.duration ? Math.max(0, parseTime(v.end, info.duration) - parseTime(v.start, 0)) : null;
-    const estimate = kept ? megabytes((kept * v.bitrate) / 8) : "–";
     const playlists = game.playlists.contents.sort((a, b) => a.name.localeCompare(b.name, game.i18n.lang))
       .map(p => `<option value="${p.id}"${p.id === v.playlist ? " selected" : ""}>${esc(p.name)}</option>`).join("");
     const qualities = QUALITIES.map(([rate, key]) => `<option value="${rate}"${rate === Number(v.bitrate) ? " selected" : ""}>${t(key)}</option>`).join("");
@@ -104,7 +102,7 @@ export class ShrinkApp extends ApplicationV2 {
           <select name="channels"><option value="2"${Number(v.channels) === 2 ? " selected" : ""}>${t("DALSEGNO.Shrink.Stereo")}</option><option value="1"${Number(v.channels) === 1 ? " selected" : ""}>${t("DALSEGNO.Shrink.Mono")}</option></select>
           <select name="bitrate">${qualities}</select>
         </div>
-        <p class="hint">${esc(game.i18n.format("DALSEGNO.Shrink.Estimate", { size: estimate }))}</p>
+        <p class="hint dsg-estimate">${esc(this.#estimate())}</p>
       </div>
       <div class="form-group">
         <label>${t("DALSEGNO.Shrink.Folder")}</label>
@@ -142,6 +140,14 @@ export class ShrinkApp extends ApplicationV2 {
     this.#controller?.abort();
   }
 
+  /** The expected size of the result, from the length kept and the bit rate. */
+  #estimate() {
+    const v = this.values;
+    const length = this.info?.duration;
+    const kept = length ? Math.max(0, Math.min(length, parseTime(v.end, length)) - parseTime(v.start, 0)) : null;
+    return game.i18n.format("DALSEGNO.Shrink.Estimate", { size: kept ? megabytes((kept * Number(v.bitrate)) / 8) : "–" });
+  }
+
   /** Keep what was typed across re-renders. */
   #remember() {
     const form = this.element;
@@ -168,7 +174,9 @@ export class ShrinkApp extends ApplicationV2 {
         return this.render();
       }
     }
-    if ( ["start", "end", "bitrate"].includes(el.name) ) this.render();
+    // Update the estimate in place: re-rendering here would wipe whatever is being typed into the next field
+    const estimate = this.element.querySelector(".dsg-estimate");
+    if ( estimate ) estimate.textContent = this.#estimate();
   }
 
   async #choose(blob, name) {
