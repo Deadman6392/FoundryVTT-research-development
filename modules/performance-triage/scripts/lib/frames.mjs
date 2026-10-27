@@ -8,13 +8,14 @@ export const frameMs = fps => (fps > 0 ? 1000 / fps : Infinity);
 /**
  * Turn "time to draw a frame with layer X hidden" measurements into per-layer costs.
  * @param {number} baseMs   Time to draw a frame with everything visible
- * @param {{id: string, label: string, ms: number, savedMs?: number, parent?: string}[]} measurements
+ * @param {{id: string, label: string, ms: number, savedMs?: number, noiseMs?: number, parent?: string}[]} measurements
  * @returns {{id: string, label: string, ms: number, savedMs: number, parent?: string}[]}
  */
 export function drawCostRows(baseMs, measurements) {
   const round = v => Math.round(v * 10) / 10;
   // A measurement timed against its own baseline brings its saving; otherwise it is the difference from the run's
-  const rows = measurements.map(m => ({ ...m, ms: round(m.ms), savedMs: round(m.savedMs ?? (baseMs - m.ms)) }));
+  const rows = measurements.map(m => ({ ...m, ms: round(m.ms), savedMs: round(m.savedMs ?? (baseMs - m.ms)),
+    ...(Number.isFinite(m.noiseMs) ? { noiseMs: round(m.noiseMs) } : {}) }));
   // Costliest first, each part listed under the experiment it breaks down
   const bySaved = (a, b) => b.savedMs - a.savedMs;
   const out = [];

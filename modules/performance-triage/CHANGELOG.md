@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.14.0
+
+From three work PC reports on 0.13.0 (Intel HD 4600, zoomed in on the 48-light interior): Automatic reached 25% for the
+GM (21.3 to 24.7 fps); a selected token took the GM's frame from 38 to 49.5 ms, and a player seeing through a token
+drew in 59 ms, where Automatic tried 25%, gained too little (16.7 to 18 fps) and went back to 50%.
+
+- **Vision measured on its own**: Measure layer costs hides every vision source's meshes, layers kept, so the report
+  says what tokens' vision costs, and the advice explains that vision redraws the map, which Lighting resolution
+  can't draw smaller without blurring it.
+- **Margins on every saving**: each part's saving comes with its margin, from how much the paired draws varied. The
+  work PC showed parts that can't cost anything at minus 1 to 4 ms; a saving inside its margin now reads "none
+  measured (± x)".
+- **The view with each measurement**: the zoom and whose vision was drawn (with its vision mode) are recorded, since
+  both change what a frame costs.
+- The background layer's label and advice now say it also draws through tokens' vision, not just under lights.
+
 ## 0.13.0
 
 From two work PC reports (Intel HD 4600) zoomed in on the 48-light interior, where lighting cost 51.5 ms of a 74 ms

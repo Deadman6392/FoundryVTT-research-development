@@ -200,6 +200,17 @@ of it the lights themselves (the rest is each layer's fixed work), and drawing i
 At 50% the frame took 40 ms and the frame rate went from 15 to 23, with no difference the GM could see in the lights.
 On Automatic it got there by itself in two steps.
 
+Selecting a token costs more again, because the screen is then drawn through that token's vision. Measured on the
+work PC, zoomed in on the same floor with lighting at 25%: the GM with no token selected drew a frame in 38 ms; with a
+token selected, 49.5 ms; a player seeing through their token, 59 ms. Most of the difference is the background layer,
+which redraws the map under lights and through the token's vision mode (darkvision's grey, for one): from nothing to
+8.5 ms for the GM's token and 11.6 ms for the player's. The lights themselves also cost more under vision (5.9 to
+13.3 ms), and fog of war and vision masking added about 3 ms. The background layer draws map detail, so Lighting
+resolution leaves it alone; on the player's view, Automatic tried 25%, saw the frame rate go only from 16.7 to 18,
+and went back to 50%. What reduces vision's cost is render scale, and fewer tokens' vision shown at once. *Measure
+layer costs* times vision on its own and notes the zoom and whose vision was drawn, so two measurements can be
+compared.
+
 So what counts is the area lights cover on screen and how many overlap there, not how many lights there are. Twenty
 sconces in separate rooms, each clipped by its walls, draw each room once; three lights whose radii all reach across
 one hall draw that hall three times. In practice:

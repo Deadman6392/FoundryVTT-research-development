@@ -24,6 +24,17 @@ function median(values) {
 }
 
 /**
+ * How far the median of these values could be off by chance: the standard error of a median, from the median absolute
+ * deviation (1.4826 x MAD estimates the spread; a median's error is about 1.25 times the mean's). On the work PC a
+ * part that can't cost anything measured as much as -4 ms; this says how big such noise is on that computer.
+ */
+function medianError(values) {
+  const m = median(values);
+  const spread = 1.4826 * median(values.map(v => Math.abs(v - m)));
+  return (1.253 * spread) / Math.sqrt(values.length);
+}
+
+/**
  * Draw the canvas once between two pixel read-backs and return how long it took in ms. Application#render is PIXI
  * 7's single-frame draw (`renderer.render(stage)`), the one the ticker calls each frame.
  */
@@ -78,7 +89,7 @@ async function pairedDraws(apply, samples) {
     }
     await wait(0);
   }
-  return { ms: median(changed), savedMs: median(saved) };
+  return { ms: median(changed), savedMs: median(saved), noiseMs: medianError(saved) };
 }
 
 /**
@@ -133,13 +144,15 @@ const BREAKDOWN_MS = 5;
 const BREAKDOWN_SHARE = 0.2;
 
 /**
- * Every light's own meshes, with the lighting layers left in place. What this saves is the part of lighting that grows
- * with lights and the area they cover; the rest is each layer's fixed full-screen work. Light sources are
- * EffectsCanvasGroup#lightSources, and each layer's mesh is RenderedEffectSource#layers[id].mesh (v13 and v14 API).
+ * Every mesh of a set of sources, with the lighting layers left in place. For lights, what this saves is the part of
+ * lighting that grows with lights and the area they cover; the rest is each layer's fixed full-screen work. For vision,
+ * it is what tokens' vision draws: a pass over everything each token sees, in its vision mode. Sources are
+ * EffectsCanvasGroup#lightSources and #visionSources, and each layer's mesh is RenderedEffectSource#layers[id].mesh
+ * (v13 and v14 API).
  */
-function hideLightMeshes() {
+function hideSourceMeshes(sources) {
   const meshes = [];
-  for ( const source of canvas.effects?.lightSources ?? [] ) {
+  for ( const source of sources ?? [] ) {
     for ( const layer of Object.values(source?.layers ?? {}) ) meshes.push(layer?.mesh);
   }
   return hide(meshes);
@@ -167,9 +180,13 @@ const PARTS = {
   effects: [
     { id: "illumination", label: "Lighting: how brightly lights illuminate the map", object: () => canvas.effects?.illumination },
     { id: "coloration", label: "Lighting: light colours", object: () => canvas.effects?.coloration },
-    { id: "background", label: "Lighting: changes lights make to the map under them", object: () => canvas.effects?.background },
+    { id: "background", label: "Lighting and vision: the map redrawn under lights and through tokens' vision",
+      object: () => canvas.effects?.background },
     { id: "darkness", label: "Lighting: darkness sources", object: () => canvas.effects?.darkness },
-    { id: "lightMeshes", label: "Lighting: the lights themselves (every light hidden, layers kept)", apply: hideLightMeshes },
+    { id: "lightMeshes", label: "Lighting: the lights themselves (every light hidden, layers kept)",
+      apply: () => hideSourceMeshes(canvas.effects?.lightSources) },
+    { id: "visionMeshes", label: "Vision: what tokens' vision draws (every vision source hidden, layers kept)",
+      apply: () => hideSourceMeshes(canvas.effects?.visionSources) },
     { id: "lightingHalf", label: "Lighting drawn at half its current resolution (nothing hidden)", apply: halveLighting }
   ],
   interface: [
@@ -181,6 +198,21 @@ const PARTS = {
     { id: "tokenInterface", label: "Interface: token bars, names, borders and effect icons", object: interfaceLayer("tokens") }
   ]
 };
+
+/**
+ * What was on screen: the zoom (Canvas#stage is the PIXI container Foundry scales to zoom) and the tokens whose vision
+ * was being drawn (PointVisionSource#visionMode, v13 and v14 API). Lighting costs more zoomed in, and each vision source
+ * draws its own pass, so two measurements are only comparable with these alongside.
+ */
+function viewNow() {
+  const vision = [];
+  for ( const source of canvas.effects?.visionSources ?? [] ) {
+    if ( !source?.active ) continue;
+    vision.push({ name: source.object?.document?.name ?? "", mode: source.visionMode?.id ?? source.data?.visionMode ?? "" });
+  }
+  const zoom = canvas.stage?.scale?.x;
+  return { zoom: Number.isFinite(zoom) ? Math.round(zoom * 100) / 100 : null, vision };
+}
 
 /** Ask Foundry to recompute anything a toggle could have disturbed. */
 function refreshCanvas() {
@@ -250,6 +282,7 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
   return telemetry.frameCost = {
     measuredAt: new Date().toISOString(),
     scene: canvas.scene?.name ?? "",
+    view: viewNow(),
     baseline,
     baselineEnd,
     baseMs: round(baseMs),
