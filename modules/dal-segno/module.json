@@ -1,0 +1,31 @@
+{
+  "id": "dal-segno",
+  "title": "Dal Segno",
+  "description": "A music deck for Foundry: play a track's windup once, loop its middle for as long as a fight lasts, and hit its ending when you press the button. Mark sections on a waveform, skip the parts you don't want, seek, change speed, shift pitch and add bass, treble, muffle or reverb, with every player kept at the same point in the track. Includes a tool that shrinks an hour-long video's soundtrack to a small Opus file in your browser. Plays alongside Foundry's own playlists, which it uses as its library.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "Deadman6392"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13"
+  },
+  "esmodules": [
+    "scripts/main.mjs"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ],
+  "url": "https://github.com/Deadman6392/FoundryVTT-research-development",
+  "manifest": "https://raw.githubusercontent.com/Deadman6392/FoundryVTT-research-development/main/modules/dal-segno/module.json",
+  "download": "https://github.com/Deadman6392/FoundryVTT-research-development/releases/download/dal-segno-v0.1.0/dal-segno.zip",
+  "bugs": "https://github.com/Deadman6392/FoundryVTT-research-development/issues",
+  "changelog": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/dal-segno/CHANGELOG.md",
+  "readme": "https://github.com/Deadman6392/FoundryVTT-research-development/blob/main/modules/dal-segno/README.md"
+}
