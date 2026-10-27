@@ -113,8 +113,9 @@ drawing, not per-frame scripts (particle updates, animations). Lighting costs mo
 pixel on screen is then inside several lights), so measure at the zoom players use. When lighting or the interface costs 5 ms a frame or a fifth of the
 frame, it also measures their parts (illumination, light colours, background changes and darkness; grid, drawings,
 templates, regions, notes and token bars). For lighting it also hides just the lights while keeping the layers,
-which splits the cost that grows with lights from each layer's fixed work, and tries lighting at half its current
-resolution. It
+which splits the cost that grows with lights from each layer's fixed work, hides tokens' vision on its own, and tries
+lighting at half its current resolution. Each saving comes with its margin (from how much the paired draws varied),
+and one inside its margin is reported as not measurable; the table notes the zoom and whose vision was drawn. It
 takes 30 seconds to a minute, only changes what this client draws while it runs, and puts everything back
 afterwards. This is the tool for "low frame rate while nothing is moving".
 

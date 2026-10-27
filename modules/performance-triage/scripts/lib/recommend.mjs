@@ -616,7 +616,7 @@ function playFindings(report, add, can) {
 /** Short names for the parts of a layer in the frame cost breakdown. */
 const PART_NAMES = {
   illumination: "illumination", coloration: "light colours", background: "background changes", darkness: "darkness",
-  lightMeshes: "the lights themselves",
+  lightMeshes: "the lights themselves", visionMeshes: "tokens' vision",
   grid: "grid", drawings: "drawings", templates: "templates", regions: "regions", notes: "notes",
   tokenInterface: "token bars and names"
 };
@@ -626,7 +626,9 @@ const PART_ADVICE = {
   illumination: "Most of it is illumination: how brightly each light lights the map.",
   coloration: "Most of it is light colours: each light's tint, drawn as a separate pass over the area it reaches.",
   lightMeshes: "Most of it is the lights themselves: each light is drawn over the area it reaches, once per layer.",
-  background: "Most of it is lights changing the map under them (some light animations and techniques do).",
+  visionMeshes: "Most of it is tokens' vision: each token whose vision is shown draws a pass over everything it sees.",
+  background: "Most of it is the background layer, which redraws the map under lights and, where a token's vision is "
+    + "shown, through its vision mode (darkvision's grey, for one). It draws map detail, so it isn't drawn smaller.",
   darkness: "Most of it is darkness sources.",
   grid: "Most of it is the grid. Its style and opacity are set per scene.",
   drawings: "Most of it is drawings; ones with text or a texture fill cost the most.",
@@ -659,7 +661,7 @@ const LAYER_ADVICE = {
  * @param {object} report
  */
 function layerAdvice(row, parts, report) {
-  const layers = parts.filter(p => p.id !== "lightMeshes");
+  const layers = parts.filter(p => (p.id !== "lightMeshes") && (p.id !== "visionMeshes"));
   const top = layers[0] ? (PART_ADVICE[layers[0].id] ?? "") : "";
   if ( row.id !== "effects" ) return [top, LAYER_ADVICE[row.id] ?? ""].filter(Boolean).join(" ");
   const cl = report.client ?? {};
@@ -675,6 +677,7 @@ function layerAdvice(row, parts, report) {
         + "light any cheaper to draw: every light is drawn again on every frame either way."
       : "Try the Low profile (which switches to Low performance mode) and measure again.",
     meshes ? meshDetail(meshes, row) : lightCount(report.canvas?.scene?.lights),
+    visionDetail(rows.find(r => r.id === "visionMeshes"), report.frameCost?.view),
     halfDetail(half, lightingScale, !!cl.lightingAuto),
     ((cl.renderScale ?? 1) < 1) ? "" : "Render scale (this module's settings, per computer) at 75% draws a little "
       + "over half the pixels, which is what this cost grows with; it needs a reload."
@@ -699,6 +702,21 @@ function meshDetail(meshes, effects) {
   }
   return `Hiding just the lights saved only ${meshes.savedMs} of the ${effects.savedMs} ms; the rest is each lighting `
     + "layer's fixed work over the whole screen, which fewer lights won't reduce but fewer pixels will.";
+}
+
+/**
+ * What tokens' vision cost. Vision redraws the map itself where the token sees, so lowering lighting resolution
+ * doesn't reach it: drawing it smaller would blur the map. What reduces it is fewer pixels overall (render scale) or
+ * fewer vision passes at once.
+ */
+function visionDetail(vision, view) {
+  if ( !vision || !(vision.savedMs >= 1) || (Number.isFinite(vision.noiseMs) && (vision.savedMs <= vision.noiseMs)) ) return "";
+  const count = view?.vision?.length ?? 0;
+  return `Tokens' vision cost ${vision.savedMs} ms here${count ? ` (${plural(count, "vision source")} drawn)` : ""}: each `
+    + "token whose vision is shown redraws the map over everything it sees, at full resolution, since drawing that "
+    + "smaller would blur the map. Lighting resolution doesn't reach it; render scale does, and so does showing fewer "
+    + "tokens' vision at once"
+    + ((count > 1) ? ", which on this computer meant several passes over the same view." : ".");
 }
 
 /** What drawing lighting at half resolution did in the measurement. */

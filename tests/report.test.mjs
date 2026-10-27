@@ -550,3 +550,32 @@ test("draw times and automatic lighting resolution show in the Canvas section", 
   assert.ok(html.includes("<td>↳ Lighting drawn at half resolution</td><td>3.5 ms</td><td>0.7 ms</td>"));
   assert.ok(!recommend(report).some(f => f.title.startsWith("What costs the most")), "1.6 ms at 144 fps is no problem");
 });
+
+test("savings carry their margin, the view is named, and vision gets its own advice", () => {
+  // Shaped like the work PC's player report: one token's darkvision, lighting at 50%
+  const report = sampleReport();
+  report.profile.id = "low";
+  report.client = { ...report.client, renderScale: 1, lightingScale: 0.5, lightingAuto: { scenes: [], history: [] },
+    canvasPerformance: { mode: 0, fps: 30, lightAnimation: false } };
+  report.canvas = { ready: true, textureMemory: 0, textures: [], scene: { name: "Interior", lights: 48 } };
+  report.frameCost = { scene: "Interior", baseline: 15.4, baselineEnd: 16, baseMs: 59.1, baseMsEnd: 59.1, stable: true,
+    view: { zoom: 1.5, vision: [{ name: "Ireena", mode: "darkvision" }] }, rows: [
+      { id: "effects", label: "Lighting and vision effects", ms: 26.8, savedMs: 28.2, noiseMs: 1.1 },
+      { id: "visionMeshes", label: "Vision: what tokens' vision draws", ms: 47.5, savedMs: 11.6, noiseMs: 0.9, parent: "effects" },
+      { id: "lightMeshes", label: "Lighting: the lights themselves", ms: 37.1, savedMs: 22, noiseMs: 1.3, parent: "effects" },
+      { id: "background", label: "Lighting: changes lights make to the map under them", ms: 44.1, savedMs: 11.6, noiseMs: 1, parent: "effects" },
+      { id: "darkness", label: "Lighting: darkness sources", ms: 61.9, savedMs: -2.8, noiseMs: 2.1, parent: "effects" },
+      { id: "tiles", label: "Tiles", ms: 60.9, savedMs: 1.2, noiseMs: 1.6 }
+    ] };
+  const findings = recommend(report);
+  const layers = findings.find(f => f.title.startsWith("What costs the most to draw"));
+  assert.match(layers.fix, /^Most of it is the background layer, which redraws the map under lights and, where a token's vision/,
+    "the costliest layer, not the lights or vision cutting across layers");
+  assert.match(layers.fix, /Tokens' vision cost 11\.6 ms here \(1 vision source drawn\)/);
+  assert.match(layers.fix, /Lighting resolution doesn't reach it; render scale does/);
+  const html = reportToHtml({ ...report, findings });
+  assert.ok(html.includes("; zoom 1.5, vision of Ireena (darkvision))"), "the view the measurement was taken in");
+  assert.ok(html.includes("<td>28.2 ms (± 1.1)</td>"));
+  assert.ok(html.includes("<td>none measured (± 2.1)</td>"), "negative: noise");
+  assert.ok(html.includes("<td>none measured (± 1.6)</td>"), "a saving inside its margin isn't claimed");
+});

@@ -265,9 +265,10 @@ function sections(report, opts = {}) {
   if ( fc?.rows ) {
     tables.push({
       caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseMs} ms to draw a frame with everything `
-        + `visible, ${fc.baseMsEnd} ms at the end${fc.stable ? "" : ", so treat these as rough"}; ${fc.baseline} fps uncapped)`,
+        + `visible, ${fc.baseMsEnd} ms at the end${fc.stable ? "" : ", so treat these as rough"}; ${fc.baseline} fps uncapped`
+        + `${describeView(fc.view)})`,
       head: ["Hidden or changed for the test", "Time to draw a frame", "Time saved per frame"],
-      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.ms} ms`, (r.savedMs > 0) ? `${r.savedMs} ms` : "none measured"])
+      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.ms} ms`, savedCell(r)])
     });
   }
   out.push({
@@ -366,6 +367,29 @@ function sections(report, opts = {}) {
     });
   }
   return out;
+}
+
+/**
+ * A saving with its margin: "10.7 ms (± 1.2)". One no bigger than its margin is reported as not measurable, since a
+ * part that can't cost anything still varies by a few ms on a slow computer.
+ */
+function savedCell(r) {
+  const margin = Number.isFinite(r.noiseMs) ? ` (± ${r.noiseMs})` : "";
+  if ( (r.savedMs <= 0) || (Number.isFinite(r.noiseMs) && (r.savedMs <= r.noiseMs)) ) return `none measured${margin}`;
+  return `${r.savedMs} ms${margin}`;
+}
+
+/** "; zoom 1.5, vision of Ireena (darkvision)" for the view a measurement was taken in. */
+function describeView(view) {
+  if ( !view ) return "";
+  const parts = [];
+  if ( Number.isFinite(view.zoom) ) parts.push(`zoom ${view.zoom}`);
+  if ( view.vision?.length ) {
+    parts.push(`vision of ${view.vision.map(v => `${v.name || "a token"}${v.mode ? ` (${v.mode})` : ""}`).join(", ")}`);
+  } else {
+    parts.push("no token vision");
+  }
+  return `; ${parts.join(", ")}`;
 }
 
 /** "50% (illumination 50%, light colours 50%)", or what the setting asked for when the layers weren't read. */

@@ -18,7 +18,7 @@ Object.assign(canvas, {
   scene: { name: "Test" },
   tokens: { placeables: tokens },
   tiles: { placeables: tiles },
-  stage: display(),
+  stage: display({ scale: { x: 1.5, y: 1.5 } }),
   rendered: display(),
   environment: display(),
   primary: display({ filters: smaa }),
@@ -27,7 +27,10 @@ Object.assign(canvas, {
   effects: Object.assign(display(), {
     illumination: display({ filter: { resolution: null } }),
     coloration: display({ filter: { resolution: null } }),
-    lightSources: [0, 1].map(() => ({ layers: { illumination: { mesh: display() }, coloration: { mesh: display() } } }))
+    lightSources: [0, 1].map(() => ({ layers: { illumination: { mesh: display() }, coloration: { mesh: display() } } })),
+    // A selected token with darkvision: its vision draws its own pass
+    visionSources: [{ active: true, visionMode: { id: "darkvision" }, object: { document: { name: "Ireena" } },
+      layers: { background: { mesh: display() } } }]
   }),
   visibility: display({ visible: false }), // Already hidden (e.g. GM view): must be skipped, not "restored" to visible
   interface: Object.assign(display(), { children: [display({ options: { name: "grid" } })] })
@@ -57,6 +60,7 @@ function frameTime() {
   if ( tiles[0].mesh.visible ) ms += 5;
   if ( canvas.primary.filters ) ms += 15;
   ms += layerTime("illumination", 4, 8) + layerTime("coloration", 2, 2);
+  if ( lighting.visible && lighting.visionSources[0].layers.background.mesh.visible ) ms += 6;
   if ( ui.visible && ui.children[0].visible ) ms += 1;
   if ( !canvas.primary.visible ) ms = 16.7;
   return ms;
@@ -104,20 +108,23 @@ test("measures each layer and restores everything", { timeout: 60_000 }, async (
   const result = await measureFrameCost(FAST);
   const by = Object.fromEntries(result.rows.map(r => [r.id, r]));
 
-  // Frame rate: 77 ms frames, about 13 fps; timer jitter allows only a range
+  // Frame rate: 83 ms frames, about 12 fps; timer jitter allows only a range
   assert.ok(result.baseline > 11 && result.baseline < 18, `baseline ${result.baseline}`);
-  // Draw times are the frame times: 77 ms with everything visible
+  // Draw times are the frame times: 83 ms with everything visible
   const near = (row, ms) => assert.ok(Math.abs(row.savedMs - ms) <= 0.2, `${row.id}: ${row.savedMs} ms saved, expected ${ms}`);
-  assert.ok(Math.abs(result.baseMs - 77) <= 0.2, `base ${result.baseMs}`);
+  assert.ok(Math.abs(result.baseMs - 83) <= 0.2, `base ${result.baseMs}`);
+  assert.deepEqual(result.view, { zoom: 1.5, vision: [{ name: "Ireena", mode: "darkvision" }] }, "what was on screen");
+  assert.ok(result.rows.every(r => Number.isFinite(r.noiseMs)), "each saving carries its margin");
   assert.ok(result.stable);
   near(by.screenFilters, 15);
   near(by.tokenFilters, 10);
   near(by.tiles, 5);
   assert.equal(by.visibility, undefined, "an already hidden group is skipped");
   // Lighting cost more than 5 ms, so its parts were measured and listed under it
-  near(by.effects, 26);
+  near(by.effects, 32);
+  near(by.visionMeshes, 6);
   const parts = result.rows.filter(r => r.parent === "effects");
-  assert.deepEqual(parts.map(r => r.id).sort(), ["coloration", "illumination", "lightMeshes", "lightingHalf"]);
+  assert.deepEqual(parts.map(r => r.id).sort(), ["coloration", "illumination", "lightMeshes", "lightingHalf", "visionMeshes"]);
   near(by.illumination, 20);
   near(by.coloration, 6);
   // Hiding the lights saves their 20 ms, not the layers' fixed 6; half resolution saves three quarters of the 20
