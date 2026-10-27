@@ -39,7 +39,7 @@ export class CustomArtApp extends ApplicationV2 {
       return `<li class="${has ? "found" : "missing"}" title="${esc(files[role] ?? "")}">`
         + `<i class="fa-solid ${has ? "fa-check" : "fa-minus"} fa-fw"></i> ${role}</li>`;
     }).join("");
-    const usingCustom = game.settings.get(MODULE_ID, "artSource") === "custom";
+    const usingCustom = game.settings.get(MODULE_ID, "artwork") === "custom";
     return `<p class="fxr-intro">${t("FLEXUI.CustomArt.Intro")}</p>
       <div class="form-group">
         <label>${t("FLEXUI.CustomArt.Folder")}</label>

@@ -4,7 +4,13 @@
       "fantasy": "Fantasy",
       "scifi": "Sci-Fi",
       "stone": "Stone",
-      "classic": "Classic FantasyUI"
+      "classic": "Classic FantasyUI",
+      "gothic": "Gothic Horror",
+      "cosmic": "Cosmic Horror",
+      "neon": "Neon Noir",
+      "infernal": "Infernal",
+      "frost": "Frostbound",
+      "fey": "Faerie Wood"
     },
     "Settings": {
       "Theme": {
@@ -28,7 +34,7 @@
       },
       "Lightweight": {
         "Name": "Lightweight textures",
-        "Hint": "Draw the sidebar panel and the chat parchment with CSS instead of the original artwork's images (the parchment alone is a 2 MB image). Turn on for slow connections or weak computers; tab icons and buttons keep their artwork."
+        "Hint": "Draw the sidebar panel and chat paper with CSS instead of images. The bundled textures are small (under 70 KB each); this matters mostly when the GM uses a custom folder with large images."
       },
       "Areas": {
         "Name": "Styled areas",
@@ -39,18 +45,25 @@
         "Name": "Table default theme",
         "Hint": "The theme for every player who leaves \"My theme\" on \"Table default\"."
       },
-      "ArtSource": {
-        "Name": "Artwork",
-        "Hint": "FlexUI Revived ships no images. Automatic uses the original FlexUI's artwork when that module is installed (it does not need to be active) and CSS textures otherwise. Custom uses the folder chosen under \"Custom artwork\", filling gaps from the original if installed.",
-        "auto": "Automatic",
-        "original": "Original FlexUI",
-        "custom": "Custom folder",
-        "none": "None (CSS textures only)"
-      },
       "CustomArt": {
         "Name": "Custom artwork",
         "Label": "Choose folder",
-        "Hint": "A folder of your own images named like the original FlexUI's (icon_chat.webp, main_panel.png, ...). Used when Artwork is set to Custom folder."
+        "Hint": "A folder of your own images named after the parts they replace (icon_chat.webp, panel_texture.png, ...). Used when Artwork is set to Custom folder."
+      },
+      "Fonts": {
+        "Name": "Themed fonts",
+        "Hint": "Use each theme's display font for speaker names, folder and scene names and headings (never for body text). Off keeps Foundry's fonts."
+      },
+      "Motion": {
+        "Name": "Ambient motion",
+        "Hint": "Slowly drifting panel textures and particles and a breathing or flickering glow on the active tab. Changes at most twice a second so the browser can rest between steps, but it is still extra drawing: leave it off on weak computers. Always off if your system asks for reduced motion."
+      },
+      "Artwork": {
+        "Name": "Artwork",
+        "Hint": "Bundled uses the free icons and textures that ship with the module. Custom folder uses the images chosen under \"Custom artwork\" and fills any gaps from the bundled set. None draws everything with CSS and keeps Foundry's own tab icons.",
+        "bundled": "Bundled",
+        "custom": "Custom folder",
+        "none": "None (CSS textures, Foundry's icons)"
       }
     },
     "Chat": {
@@ -58,8 +71,7 @@
       "Blind": "(Blind)"
     },
     "Notify": {
-      "OriginalActive": "The original FlexUI module is active. It was made for Foundry v11 and breaks this version's interface, so FlexUI Revived switched its stylesheets off for this session. Deactivate it in Manage Modules; keep it installed if you want its artwork.",
-      "OriginalMissing": "FlexUI Revived is set to use the original FlexUI's artwork, but that module is not installed. Install it (it does not need to be active) or choose another Artwork setting."
+      "OriginalActive": "The original FlexUI module is active. It was made for Foundry v11 and breaks this version's interface, so FlexUI Revived switched its stylesheets off for this session. Deactivate it in Manage Modules; FlexUI Revived doesn't need it."
     },
     "Areas": {
       "Title": "FlexUI Revived: styled areas",
@@ -108,7 +120,7 @@
     },
     "CustomArt": {
       "Title": "FlexUI Revived: custom artwork",
-      "Intro": "Choose a folder in your Foundry data containing any of the images below, named the same way (any of webp, png, jpg, avif, gif or svg). Each image found replaces that part of every theme; anything missing falls back to the original FlexUI's artwork if it is installed, otherwise to CSS.",
+      "Intro": "Choose a folder in your Foundry data containing any of the images below, named the same way (any of webp, png, jpg, avif, gif or svg). Each image found replaces that part of every theme; anything missing comes from the bundled artwork. Icons are shown in full color; panel_texture and parchment repeat as textures; main_panel is stretched around the sidebar as a frame.",
       "Folder": "Folder",
       "FolderHint": "Folders in your user data only. S3 buckets and other file sources are not listed.",
       "Found": "{found} of {total} images found:",

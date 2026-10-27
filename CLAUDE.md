@@ -91,6 +91,22 @@ These are requirements, not suggestions. `npm run check` enforces the first one.
 - Don't touch other modules' settings unless the module is active, the setting is registered as client-scoped, and
   the user (or their GM) asked for it; always back up and restore the user's own value.
 
+## Modules in this repo must work together
+
+The table runs these modules side by side (FlexUI Revived, Performance Triage, and more to come, such as a music
+player), so compatibility is a requirement:
+
+- **Stylesheets go in Foundry's `modules` cascade layer** (manifest `styles` land there automatically; wrap injected
+  CSS in `@layer modules { ... }`). FlexUI Revived puts its theme in the sub-layer `modules.flexui-revived`, so any
+  module's own rules beat the theme without specificity fights. Never use unlayered CSS or `!important` to win.
+- **Match the theme, don't depend on it**: read FlexUI Revived's `--fxr-*` tokens with fallbacks to core variables
+  (`var(--fxr-panel, var(--control-bg-color))`), and use `game.modules.get("flexui-revived")?.api?.theme` or the
+  `flexuiRevived.themeChanged` hook for anything drawn outside CSS. Its README lists the tokens.
+- **Stay in your own space**: prefix CSS classes, settings, flags and hook names with the module id; don't set layout
+  on core containers; don't restyle another module's elements.
+- **When a module takes over a core area** (a music player replacing the playlists tab, say), say so in its README so
+  players know which FlexUI Revived area to untick if the two looks clash.
+
 ## Honesty in docs and UI
 
 Say what a feature can't do. If something overlaps an existing package, say so and explain when to use which.

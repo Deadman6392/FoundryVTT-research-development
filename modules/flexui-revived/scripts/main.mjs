@@ -4,68 +4,107 @@
  * The whole theme is one generated <style> element. It is written once when translations are ready (before any of
  * the interface renders) and rewritten in place whenever a setting changes, so nothing here needs a reload and no
  * hook listens while the game is running. The two settings windows are loaded with import() when opened.
+ *
+ * Other modules can match the theme without depending on this one: every color is a --fxr-* custom property, and
+ * game.modules.get("flexui-revived")?.api.theme plus the "flexuiRevived.themeChanged" hook describe the current one.
  */
 import { MODULE_ID, ORIGINAL_ID, STYLE_ID } from "./constants.mjs";
-import { THEMES, THEME_IDS } from "./lib/themes.mjs";
+import { FONTS, THEMES, THEME_IDS } from "./lib/themes.mjs";
 import { ART_SOURCES, resolveArt } from "./lib/art.mjs";
-import { DEFAULT_AREAS, buildStylesheet, normalizeAreas } from "./lib/stylesheet.mjs";
+import { DEFAULT_AREAS, LAYER, buildStylesheet, normalizeAreas } from "./lib/stylesheet.mjs";
 import { FONT_SIZES, SIZES, legacyChoices, resolveTheme } from "./lib/choice.mjs";
 
 const state = {
-  themeId: null,
-  originalActive: false
+  /** What api.theme returns, and the last value announced through the hook, as JSON for comparison. */
+  info: null,
+  announced: "null",
+  originalActive: false,
+  /** motion.mjs once loaded, and the glow style motion should run with (null: stopped). */
+  motion: null,
+  motionStyle: null
 };
 
 const setting = key => game.settings.get(MODULE_ID, key);
-
-/**
- * Whether Foundry lists the original FlexUI, active or not. Foundry serves an installed module's files either way,
- * which is how its artwork can be used without activating its v11 code.
- */
-function originalInstalled() {
-  return Boolean(game.modules.get(ORIGINAL_ID));
-}
 
 /* -------------------------------------------- */
 /*  Applying the theme                          */
 /* -------------------------------------------- */
 
+/**
+ * The current theme as plain data for other modules, or null when Foundry's own look is showing.
+ * @returns {{id: string, palette: Record<string, string>, font: string|null, motion: boolean, layer: string}|null}
+ */
+function describe(themeId, { fonts, motion }) {
+  if ( !themeId ) return null;
+  const theme = THEMES[themeId];
+  return {
+    id: themeId,
+    palette: { ...theme.palette },
+    font: (fonts && FONTS[theme.font]?.family) || null,
+    motion,
+    layer: LAYER
+  };
+}
+
 /** Write (or remove) the theme stylesheet for the current settings. Safe to call at any time after init. */
 export function apply() {
   const themeId = resolveTheme({ choice: setting("theme"), tableDefault: setting("defaultTheme"), themeIds: THEME_IDS });
+  const fonts = setting("fonts");
+  const motion = setting("motion");
+  const areas = normalizeAreas(setting("areas"));
   const body = document.body;
   body?.classList.toggle("flexui-revived", Boolean(themeId));
   for ( const id of THEME_IDS ) body?.classList.toggle(`flexui-revived-${id}`, id === themeId);
-  state.themeId = themeId;
 
   let style = document.getElementById(STYLE_ID);
-  if ( !themeId ) {
-    style?.remove();
-    return;
+  if ( !themeId ) style?.remove();
+  else {
+    const theme = THEMES[themeId];
+    const art = resolveArt({
+      theme,
+      source: setting("artwork"),
+      custom: setting("customArt")?.files ?? {},
+      lightweight: setting("lightweight")
+    });
+    const css = buildStylesheet({
+      theme,
+      art,
+      areas,
+      size: setting("size"),
+      font: setting("font"),
+      fonts,
+      motion,
+      labels: { whisper: game.i18n.localize("FLEXUI.Chat.Whisper"), blind: game.i18n.localize("FLEXUI.Chat.Blind") },
+      route: path => foundry.utils.getRoute(path)
+    });
+    if ( !style ) {
+      style = document.createElement("style");
+      style.id = STYLE_ID;
+      document.head.append(style);
+    }
+    if ( style.textContent !== css ) style.textContent = css;
   }
-  const theme = THEMES[themeId];
-  const art = resolveArt({
-    theme,
-    source: setting("artSource"),
-    originalInstalled: originalInstalled(),
-    custom: setting("customArt")?.files ?? {},
-    lightweight: setting("lightweight")
-  });
-  const css = buildStylesheet({
-    theme,
-    art,
-    areas: normalizeAreas(setting("areas")),
-    size: setting("size"),
-    font: setting("font"),
-    labels: { whisper: game.i18n.localize("FLEXUI.Chat.Whisper"), blind: game.i18n.localize("FLEXUI.Chat.Blind") },
-    route: path => foundry.utils.getRoute(path)
-  });
-  if ( !style ) {
-    style = document.createElement("style");
-    style.id = STYLE_ID;
-    document.head.append(style);
+
+  syncMotion(themeId && motion && (areas.tabs || areas.panel) ? THEMES[themeId].glow : null);
+
+  state.info = describe(themeId, { fonts, motion });
+  const json = JSON.stringify(state.info);
+  if ( json !== state.announced ) {
+    state.announced = json;
+    Hooks.callAll("flexuiRevived.themeChanged", state.info);
   }
-  if ( style.textContent !== css ) style.textContent = css;
+}
+
+/**
+ * Start or stop ambient motion. Its timer lives in motion.mjs, fetched the first time a player turns motion on; the
+ * latest wish wins even if settings change again while it loads.
+ * @param {string|null} style   The theme's glow style, or null to stop
+ */
+function syncMotion(style) {
+  state.motionStyle = style;
+  if ( !style && !state.motion ) return;
+  const loaded = state.motion ? Promise.resolve(state.motion) : import("./motion.mjs").then(m => (state.motion = m));
+  loaded.then(m => (state.motionStyle ? m.start(state.motionStyle) : m.stop()));
 }
 
 /* -------------------------------------------- */
@@ -139,6 +178,24 @@ function registerSettings() {
     default: legacy.font ?? "medium",
     onChange
   });
+  game.settings.register(MODULE_ID, "fonts", {
+    name: "FLEXUI.Settings.Fonts.Name",
+    hint: "FLEXUI.Settings.Fonts.Hint",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: true,
+    onChange
+  });
+  game.settings.register(MODULE_ID, "motion", {
+    name: "FLEXUI.Settings.Motion.Name",
+    hint: "FLEXUI.Settings.Motion.Hint",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: false,
+    onChange
+  });
   game.settings.register(MODULE_ID, "lightweight", {
     name: "FLEXUI.Settings.Lightweight.Name",
     hint: "FLEXUI.Settings.Lightweight.Hint",
@@ -174,18 +231,16 @@ function registerSettings() {
     default: "fantasy",
     onChange
   });
-  game.settings.register(MODULE_ID, "artSource", {
-    name: "FLEXUI.Settings.ArtSource.Name",
-    hint: "FLEXUI.Settings.ArtSource.Hint",
+  // A new key rather than 0.1's "artSource", whose "auto" and "original" choices no longer exist
+  game.settings.register(MODULE_ID, "artwork", {
+    name: "FLEXUI.Settings.Artwork.Name",
+    hint: "FLEXUI.Settings.Artwork.Hint",
     scope: "world",
     config: true,
     type: String,
-    choices: Object.fromEntries(ART_SOURCES.map(s => [s, `FLEXUI.Settings.ArtSource.${s}`])),
-    default: "auto",
-    onChange: () => {
-      apply();
-      warnIfOriginalMissing();
-    }
+    choices: Object.fromEntries(ART_SOURCES.map(s => [s, `FLEXUI.Settings.Artwork.${s}`])),
+    default: "bundled",
+    onChange
   });
   game.settings.register(MODULE_ID, "customArt", {
     scope: "world",
@@ -219,25 +274,21 @@ function disableOriginalStylesheets() {
   for ( const link of document.querySelectorAll("link[href*=\"modules/flexui/css/\"]") ) link.remove();
 }
 
-function warnIfOriginalMissing() {
-  if ( !game.user?.isGM || (setting("artSource") !== "original") || originalInstalled() ) return;
-  ui.notifications.warn(game.i18n.localize("FLEXUI.Notify.OriginalMissing"));
-}
-
-function warnGM() {
-  if ( game.user?.isGM && state.originalActive ) {
-    ui.notifications.warn(game.i18n.localize("FLEXUI.Notify.OriginalActive"), { permanent: true });
-  }
-  warnIfOriginalMissing();
-}
-
 /* -------------------------------------------- */
 /*  Hooks                                       */
 /* -------------------------------------------- */
 
 Hooks.once("init", () => {
   registerSettings();
-  game.modules.get(MODULE_ID).api = { apply, openAreas, openCustomArt };
+  game.modules.get(MODULE_ID).api = {
+    apply,
+    openAreas,
+    openCustomArt,
+    /** The current theme (id, palette, display font, motion, cascade layer), or null when it is off. */
+    get theme() {
+      return state.info;
+    }
+  };
 });
 
 // Translations are needed for the chat labels; this still runs before the interface first renders
@@ -247,5 +298,7 @@ Hooks.once("ready", () => {
   // Again in case core rewrote the body's classes while building the interface; the stylesheet text is unchanged,
   // so the browser has nothing to recalculate
   apply();
-  warnGM();
+  if ( game.user?.isGM && state.originalActive ) {
+    ui.notifications.warn(game.i18n.localize("FLEXUI.Notify.OriginalActive"), { permanent: true });
+  }
 });

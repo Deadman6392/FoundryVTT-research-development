@@ -1,9 +1,11 @@
 /**
- * Where theme images come from. FlexUI Revived ships no artwork: the original FlexUI's images belong to iotech and
- * Rexard and may not be redistributed. A table can use them from an installed copy of the original module (which
- * Foundry serves whether or not that module is active), use its own folder of images, or use none and let the CSS
- * textures stand in. No Foundry globals here.
+ * Where theme images come from: the free icons and textures bundled in assets/ (see CREDITS.md), a GM's own folder
+ * of images, or none at all, in which case CSS textures and Font Awesome icons stand in. No Foundry globals here.
  */
+import { iconFor } from "./themes.mjs";
+
+/** Where the bundled assets live, relative to Foundry's data root. */
+export const ASSET_ROOT = "modules/flexui-revived/assets";
 
 /** Sidebar tab id (the button's data-tab) -> image role. Tabs not listed keep their Font Awesome icon. */
 export const TAB_ART = {
@@ -21,27 +23,32 @@ export const TAB_ART = {
   settings: "icon_settings"
 };
 
-/** Every image role, named after the original FlexUI's file names (without extension). */
+/**
+ * Every role a custom folder can fill, named like the original FlexUI's files so a folder laid out the same way works.
+ * panel_texture is new: a tiling texture for the sidebar panel, where main_panel is a frame stretched around it.
+ */
 export const ART_ROLES = [
   ...Object.values(TAB_ART),
   "arrow_left", "arrow_right", "arrow_up", "arrow_down",
-  "main_panel", "parchment", "button_clear", "button_fancy", "button_green", "button_red", "dropdown_border"
+  "main_panel", "panel_texture", "parchment", "button_clear", "button_green", "button_red", "dropdown_border"
 ];
 
-/**
- * Roles skipped by lightweight textures. The original parchment is a 2 MB image decoded at full size; CSS textures
- * draw these surfaces instead.
- */
-export const HEAVY_ROLES = ["main_panel", "parchment"];
+/** Roles skipped by lightweight textures: the surfaces that can be large images in a custom folder. */
+export const HEAVY_ROLES = ["main_panel", "panel_texture", "parchment"];
 
-export const ART_SOURCES = ["auto", "original", "custom", "none"];
+export const ART_SOURCES = ["bundled", "custom", "none"];
+
+/**
+ * 0.1 offered "auto" and "original" (the original FlexUI's artwork from an installed copy); both now mean the bundled
+ * artwork, which replaced it.
+ * @param {string} source
+ * @returns {string} One of ART_SOURCES
+ */
+export function normalizeSource(source) {
+  return ART_SOURCES.includes(source) ? source : "bundled";
+}
 
 const IMAGE_EXT = /\.(webp|png|jpe?g|avif|gif|svg)$/i;
-
-/** Where the original FlexUI (0.3.0) keeps a theme's images, relative to Foundry's data root. */
-export function originalArtPath(folder, role) {
-  return `modules/flexui/ui/img/${folder}/${role}.webp`;
-}
 
 /**
  * Map the files found in a folder to image roles by file name, ignoring case and extension. When two files share a
@@ -61,29 +68,46 @@ export function matchArtFiles(paths) {
   return found;
 }
 
+/** How a custom image in a role is drawn. */
+function customKind(role) {
+  if ( role === "main_panel" ) return "frame";
+  if ( (role === "panel_texture") || (role === "parchment") ) return "tile";
+  return "image";
+}
+
 /**
  * Decide which image each role uses for a theme.
+ * kind "mask": a one-color bundled icon, tinted by the theme; "image": a full-color picture; "tile": a repeating
+ * texture; "frame": a border image stretched around the sidebar panel.
  * @param {object} options
- * @param {{folder: string}} options.theme
- * @param {string} options.source              One of ART_SOURCES
- * @param {boolean} options.originalInstalled   Whether Foundry lists the original FlexUI module
+ * @param {object} options.theme                     An entry of THEMES
+ * @param {string} options.source                    One of ART_SOURCES (older values are normalized)
  * @param {Record<string, string>} [options.custom]  Roles found in the GM's custom folder
- * @param {boolean} [options.lightweight]        Leave out HEAVY_ROLES
- * @returns {Record<string, string>} role -> path; roles without an image are absent
+ * @param {boolean} [options.lightweight]            Leave out HEAVY_ROLES
+ * @returns {Record<string, {path: string, kind: string}>} Roles without an image are absent
  */
-export function resolveArt({ theme, source, originalInstalled, custom = {}, lightweight = false }) {
+export function resolveArt({ theme, source, custom = {}, lightweight = false }) {
+  source = normalizeSource(source);
   const art = {};
-  const useOriginal = (source === "original") || ((source !== "none") && originalInstalled);
-  if ( useOriginal ) for ( const role of ART_ROLES ) art[role] = originalArtPath(theme.folder, role);
-  if ( source === "custom" ) Object.assign(art, custom);
+  if ( source !== "none" ) {
+    for ( const [tab, role] of Object.entries(TAB_ART) ) {
+      art[role] = { path: `${ASSET_ROOT}/icons/${iconFor(theme, tab)}.svg`, kind: "mask" };
+    }
+    if ( theme.panel?.texture ) art.panel_texture = { path: `${ASSET_ROOT}/textures/${theme.panel.texture}.webp`, kind: "tile" };
+    if ( theme.paper?.texture ) art.parchment = { path: `${ASSET_ROOT}/textures/${theme.paper.texture}.webp`, kind: "tile" };
+  }
+  if ( source === "custom" ) {
+    for ( const [role, path] of Object.entries(custom) ) {
+      if ( ART_ROLES.includes(role) ) art[role] = { path, kind: customKind(role) };
+    }
+  }
   if ( lightweight ) for ( const role of HEAVY_ROLES ) delete art[role];
   return art;
 }
 
 /**
  * Turn a stored path into something a stylesheet can load. Relative paths go through the route function so a server
- * with a URL prefix (https://host/foundry/) still finds them; the original FlexUI hard-coded /modules/... and broke
- * there.
+ * with a URL prefix (https://host/foundry/) still finds them.
  * @param {string} path
  * @param {(path: string) => string} route   foundry.utils.getRoute in Foundry
  * @returns {string} A quoted CSS url()

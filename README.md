@@ -6,7 +6,7 @@ the way the table likes.
 | Module | What it does | Status |
 | --- | --- | --- |
 | [Performance Triage](modules/performance-triage) | Measures what slows each client down (load, files per module, stutters, hook costs, GPU memory, world bloat) and lets the GM give weak computers a lighter client profile. | 0.12.0, Foundry v13 |
-| [FlexUI Revived](modules/flexui-revived) | iotech's FlexUI themes (Fantasy, Sci-Fi, Stone, Classic FantasyUI) rebuilt for v13's interface, with live switching, a GM table default and per-area toggles. Uses the original's artwork from an installed copy, your own images, or CSS. | 0.1.0, built for v13, not yet run in a world |
+| [FlexUI Revived](modules/flexui-revived) | Ten interface themes for v13 (the four FlexUI originals plus horror, neon, infernal, frost and faerie presets) with bundled free icons, textures and fonts, optional low-cost ambient motion, a GM table default, and styles that yield to other modules. | 0.2.0, Foundry v13 |
 
 ## Guides
 

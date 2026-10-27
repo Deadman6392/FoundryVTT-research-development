@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.2.0
+
+Own artwork, six new themes, display fonts and optional motion. The original FlexUI's images are no longer used.
+
+- **Bundled free artwork**: 77 icons from game-icons.net (CC BY 3.0), 12 CC0 textures from Poly Haven and ambientCG,
+  and seven display fonts (OFL and Apache 2.0), credited in CREDITS.md. Icons are tinted with each theme's accent and
+  glow softly. A theme downloads 32 to 108 KB, against 1 to 2.7 MB with the original's art.
+- **Six new themes**: Gothic Horror, Cosmic Horror, Neon Noir, Infernal, Frostbound and Faerie Wood, each with its
+  own icons for the sidebar tabs, texture, paper, font, particles and glow. The four original themes now use the
+  bundled art too.
+- **Themed fonts** (on by default, per computer): the theme's display font for speaker, folder and scene names and
+  headings.
+- **Ambient motion** (off by default, per computer): drifting texture and particles and a breathing, pulsing or
+  flickering glow on the active tab, stepped once a second by a timer that stops while the page is hidden and never
+  runs under reduced motion. Measured at about 0.2% of a core in headless Chromium; CSS animations cost ten to thirty
+  times more main-thread time, so none are used.
+- **Yields to other modules**: rules moved into the cascade layer `modules.flexui-revived`, so any module's own
+  stylesheet wins over the theme where both style the same thing.
+- **For module authors**: documented `--fxr-*` tokens, `api.theme`, and a `flexuiRevived.themeChanged` hook.
+- **Artwork setting** is now Bundled, Custom folder or None (a new setting key; 0.1's Automatic/Original choices are
+  gone). Custom folders gain a `panel_texture` image; missing images fall back to the bundled set.
+- The sidebar tab strip is drawn on the theme's surface, and the panel gets a vignette.
+
 ## 0.1.1
 
 - The manifest now names v13 as its verified version. Sqyre refused to install 0.1.0 ("Install failed due to a
