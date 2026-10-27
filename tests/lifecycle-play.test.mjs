@@ -139,3 +139,15 @@ test("Automatic lighting resolution runs its controller only while chosen", asyn
   await game.settings.set("performance-triage", "lightingScale", 1);
   assert.equal(listeners(), before);
 });
+
+test("long frames while the frame rate isn't the scene's own (a measurement, the idle throttle) aren't stutters", async () => {
+  const { startPlayTracker, stopPlayTracker } = await import("../modules/performance-triage/scripts/play-tracker.mjs");
+  let paused = true;
+  const stats = startPlayTracker({ isThrottled: () => paused, windowMs: 100 });
+  const longFrame = () => telemetry.onPlayFrame({ startTime: performance.now(), duration: 400, scripts: [] });
+  longFrame();
+  paused = false;
+  longFrame();
+  assert.equal(stats.current.stutters, 1, "only the one outside the measurement");
+  stopPlayTracker();
+});

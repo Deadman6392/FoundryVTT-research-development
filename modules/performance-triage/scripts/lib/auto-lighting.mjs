@@ -5,8 +5,11 @@
  * Pure decision logic with no Foundry globals, so every path can be tested in Node.
  */
 
-/** Lighting resolution steps, sharpest first. */
-export const STEPS = [1, 0.75, 0.5];
+/**
+ * Lighting resolution steps, sharpest first. 50% looked no different from full on the work PC; 25% is there for when
+ * 50% isn't enough, and like every step it is kept only if the frame rate rose.
+ */
+export const STEPS = [1, 0.75, 0.5, 0.25];
 
 /** Frames are counted over windows this long. */
 export const WINDOW_MS = 3000;
@@ -25,6 +28,14 @@ const MIN_GAIN = 0.08;
 
 /** A step that proved too slow, or a step down that didn't help, isn't tried again on that scene for this long. */
 export const RETRY_MS = 10 * 60_000;
+
+/**
+ * A window with a frame longer than this (and three times the window's average frame) held a stall: the page
+ * finishing loading, a module's long hook, a big dice roll. Lighting resolution can't fix a stall, and a window with
+ * one says nothing about what lighting costs, so it neither triggers a step nor judges one. On the work PC the first
+ * automatic step was taken seconds after a 5.6 s load freeze, at "6.9 fps", and judged a success when loading ended.
+ */
+const STALL_MS = 400;
 
 /** Kept for the report. */
 const MAX_HISTORY = 12;
@@ -65,18 +76,20 @@ export class AutoLighting {
 
   /**
    * One measured window of play on the current scene.
-   * @param {number} fps     Frame rate over the window
-   * @param {number} target  The frame cap in force
-   * @param {number} now     A timestamp in ms
+   * @param {number} fps             Frame rate over the window
+   * @param {number} target          The frame cap in force
+   * @param {number} now             A timestamp in ms
+   * @param {number} [longestFrame]  The longest time between two frames in the window, in ms
    * @returns {LightingChange|null}  A change to apply, or null to leave it
    */
-  addWindow(fps, target, now) {
+  addWindow(fps, target, now, longestFrame = 0) {
     const s = this.scene;
     if ( !s || !(target > 0) || !Number.isFinite(fps) ) return null;
     if ( s.settle ) {
       s.settle = false;
       return null;
     }
+    if ( longestFrame > Math.max(STALL_MS, (3 * 1000) / Math.max(fps, 0.1)) ) return null;
 
     // Judge the last step down on the first full window after it
     if ( s.trial ) {

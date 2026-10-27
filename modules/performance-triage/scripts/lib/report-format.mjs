@@ -267,7 +267,7 @@ function sections(report, opts = {}) {
       caption: `What each layer costs on this computer (${fc.scene}: ${fc.baseMs} ms to draw a frame with everything `
         + `visible, ${fc.baseMsEnd} ms at the end${fc.stable ? "" : ", so treat these as rough"}; ${fc.baseline} fps uncapped)`,
       head: ["Hidden or changed for the test", "Time to draw a frame", "Time saved per frame"],
-      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.ms} ms`, `${r.savedMs} ms`])
+      rows: fc.rows.map(r => [r.parent ? `↳ ${r.label}` : r.label, `${r.ms} ms`, (r.savedMs > 0) ? `${r.savedMs} ms` : "none measured"])
     });
   }
   out.push({
@@ -276,8 +276,9 @@ function sections(report, opts = {}) {
     intro: cv?.ready
       ? "\"Measure layer costs\" hides each part of the canvas for a moment and times how long a frame takes to "
         + "draw, waiting for the graphics card to finish each one, so it works whatever the frame cap or the screen's "
-        + "refresh rate. It takes about 30 seconds, longer when lighting or the interface cost enough to be broken "
-        + "down into their parts; the map will flicker, and nothing is saved or changed for anyone else."
+        + "refresh rate. Lighting costs more the further you zoom in, so measure at the zoom players use. It takes "
+        + "about 30 seconds, longer when lighting or the interface cost enough to be broken down into their parts; "
+        + "the map will flicker, and nothing is saved or changed for anyone else."
       : "",
     tables,
     actions: cv?.ready ? [["measureFrameCost", "Measure layer costs (30 to 60 s)"],

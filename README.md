@@ -5,7 +5,7 @@ the way the table likes.
 
 | Module | What it does | Status |
 | --- | --- | --- |
-| [Performance Triage](modules/performance-triage) | Measures what slows each client down (load, files per module, stutters, hook costs, GPU memory, world bloat) and lets the GM give weak computers a lighter client profile. | 0.12.0, Foundry v13 |
+| [Performance Triage](modules/performance-triage) | Measures what slows each client down (load, files per module, stutters, hook costs, GPU memory, world bloat) and lets the GM give weak computers a lighter client profile. | 0.13.0, Foundry v13 |
 | [FlexUI Revived](modules/flexui-revived) | Ten interface themes for v13 (the four FlexUI originals plus horror, neon, infernal, frost and faerie presets) with bundled free icons, textures and fonts, optional low-cost ambient motion, a GM table default, and styles that yield to other modules. | 0.2.0, Foundry v13 |
 
 ## Guides

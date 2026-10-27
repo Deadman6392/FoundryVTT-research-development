@@ -32,6 +32,7 @@ const state = {
   lightingScale: 1,
   lightingHook: null,
   lightingAuto: false,
+  lightingSetting: null,
   autoLighting: null,
   measuring: false
 };
@@ -163,7 +164,7 @@ function registerSettings() {
     scope: "client",
     config: true,
     type: Number,
-    choices: { 1: "100%", 0.75: "75%", 0.5: "50%", [LIGHTING_AUTO]: "PTRIAGE.Settings.LightingScale.Auto" },
+    choices: { 1: "100%", 0.75: "75%", 0.5: "50%", 0.25: "25%", [LIGHTING_AUTO]: "PTRIAGE.Settings.LightingScale.Auto" },
     default: 1,
     // Applies to the canvas being viewed straight away, and to every scene drawn after it
     onChange: value => useLightingScale(value)
@@ -287,6 +288,7 @@ function applyLighting(scale) {
  * its controller, which picks the step per scene from the frame rate it sees; it isn't fetched otherwise.
  */
 async function useLightingScale(value) {
+  state.lightingSetting = Number(value);
   const auto = Number(value) === LIGHTING_AUTO;
   state.lightingAuto = auto;
   if ( state.lightingHook ) {
@@ -298,7 +300,7 @@ async function useLightingScale(value) {
       state.autoLighting ??= await import("./auto-lighting.mjs");
       // The setting can change again while the code loads
       if ( state.lightingAuto ) {
-        state.autoLighting.startAutoLighting({ apply: applyLighting, isPaused: () => !!state.idle?.throttled || state.measuring });
+        state.autoLighting.startAutoLighting({ apply: applyLighting, isPaused });
       }
     } catch(err) {
       console.warn(`${MODULE_ID} | Could not start automatic lighting resolution`, err);
@@ -315,11 +317,17 @@ async function useLightingScale(value) {
 /*  Frame rate during play                      */
 /* -------------------------------------------- */
 
+/**
+ * Whether the frame rate isn't the scene's own right now: the idle throttle has lowered it, or a measurement is
+ * drawing extra frames. Play tracking and automatic lighting resolution ignore those stretches.
+ */
+const isPaused = () => !!state.idle?.throttled || state.measuring;
+
 /** Start or stop the play tracker; its code is only fetched while it is on. */
 async function togglePlayTracking(on) {
   try {
     const tracker = await import("./play-tracker.mjs");
-    if ( on ) tracker.startPlayTracker({ isThrottled: () => !!state.idle?.throttled });
+    if ( on ) tracker.startPlayTracker({ isThrottled: isPaused });
     else tracker.stopPlayTracker();
   } catch(err) {
     console.warn(`${MODULE_ID} | Could not ${on ? "start" : "stop"} frame rate tracking`, err);
@@ -432,6 +440,10 @@ Hooks.once("ready", async () => {
   }
 
   if ( profile.idle && globalThis.canvas?.app ) state.idle = new IdleThrottle(profile.idle).start();
+
+  // A profile writes its settings straight to storage during setup, after init read Lighting resolution
+  const lighting = Number(game.settings.get(MODULE_ID, "lightingScale"));
+  if ( lighting !== state.lightingSetting ) useLightingScale(lighting);
 
   if ( telemetry.hookProfiler?.installed ) ui.notifications.warn(game.i18n.localize("PTRIAGE.Notify.ProfilerActive"));
 

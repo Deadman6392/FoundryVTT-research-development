@@ -80,32 +80,41 @@ so it is the setting to try when a computer's graphics card is the bottleneck. I
 automation, which are CPU work. It is applied through Foundry's `canvasConfig` hook before the canvas is created, so
 it needs a reload. Not yet included in any profile.
 
-**Lighting resolution** (client setting, per computer): draws light and light colours at 75% or 50% of the canvas
-resolution while the map, tokens and interface stay sharp, or picks the step automatically. Foundry draws every light
+**Lighting resolution** (client setting, per computer): draws light and light colours at 75%, 50% or 25% of the
+canvas resolution while the map, tokens and interface stay sharp, or picks the step automatically. Foundry draws every light
 over the area it reaches, once per lighting layer, on every frame, so lighting costs in proportion to pixels even when
 nothing animates; a light's glow is a smooth gradient and survives being drawn smaller, though edges at walls get
 softer. It lowers the resolution of the masking filter the illumination and coloration layers already draw through,
 applies straight away and to every scene drawn after, and 100% restores Foundry's own values. The background layer
 (lights recolouring the map itself) is left alone, since drawing it smaller would blur the map. In headless Chromium
 with PIXI 7.4.2, 40 overlapping lights in a filtered container drew in 37% of the time at 50%, with the picture
-changing only at light edges; in a Foundry 13.351 world the report confirmed both layers took the lower resolution.
+changing only at light edges. On the measured world's work PC (Intel HD 4600), zoomed in on a 48-light interior,
+lighting cost 51.5 ms of a 74 ms frame; at 50% the frame took 40 ms, 15 fps became 23 to 24, and the GM saw no
+difference in the lights. 25% is there for computers that still fall behind at 50%; it softens light edges at walls.
 
 *Automatic* is for the computer nobody will tune mid-session: it keeps full resolution until this computer falls
 below 80% of its frame cap on a scene for two 3-second checks in a row, then lowers lighting a step. It keeps the step
 only if the frame rate rose by 8% or more (when it doesn't, lighting wasn't the bottleneck and it goes back), tries
 the sharper step again after the frame rate has held near the cap and ten minutes have passed, and remembers each
 scene's step for the session. It pauses while the idle throttle is lowering the frame rate, while the tab is hidden,
-and while a measurement runs, and says once per session when it first lowers lighting.
+and while a measurement runs, and ignores checks that contain a stall (a frame over 400 ms, such as the page finishing
+loading or a module's long hook), which lighting can't fix. It says once per session when it first lowers lighting;
+the report lists every step with the frame rate before and after. On the work PC it went from
+100% to 75% (15 to 18.7 fps) and then 50% (23.9 fps) within ten seconds of falling behind. The Balanced, Low and
+Minimum profiles set it, so a computer the GM assigns one of them gets it without anyone opening a setting.
 
 **Layer costs** (button in the report's Canvas section): hides each part of the canvas in turn (token filters, tokens,
 tiles, lighting, fog and vision, interface, full-screen filters) and times how long a frame takes to draw with it
 hidden. Each frame is drawn between two pixel read-backs, which wait for the graphics card to finish, so it measures
 the whole cost of drawing whatever the frame cap or the screen's refresh rate: before 0.12 it counted frames, and a
-computer that keeps up with its screen (a 144 Hz desktop) showed every layer as free. It measures drawing, not
-per-frame scripts (particle updates, animations). When lighting or the interface costs 5 ms a frame or a fifth of the
+computer that keeps up with its screen (a 144 Hz desktop) showed every layer as free. Draws with and without each
+change alternate, so a computer that speeds up or slows down during the test affects both alike. It measures
+drawing, not per-frame scripts (particle updates, animations). Lighting costs more the further you zoom in (every
+pixel on screen is then inside several lights), so measure at the zoom players use. When lighting or the interface costs 5 ms a frame or a fifth of the
 frame, it also measures their parts (illumination, light colours, background changes and darkness; grid, drawings,
 templates, regions, notes and token bars). For lighting it also hides just the lights while keeping the layers,
-which splits the cost that grows with lights from each layer's fixed work, and tries lighting at half resolution. It
+which splits the cost that grows with lights from each layer's fixed work, and tries lighting at half its current
+resolution. It
 takes 30 seconds to a minute, only changes what this client draws while it runs, and puts everything back
 afterwards. This is the tool for "low frame rate while nothing is moving".
 

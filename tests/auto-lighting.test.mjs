@@ -100,3 +100,37 @@ test("the controller counts frames on the canvas, applies its steps, and stops c
   assert.equal(env.Hooks.events.canvasReady?.length ?? 0, 0, "and the scene listener");
   assert.equal(autoLightingSummary(), null);
 });
+
+test("when 50% isn't enough, a 25% step is tried and kept only if it helps", () => {
+  const auto = new AutoLighting();
+  auto.setScene("castle", "Castle");
+  // Each step helps a little, and 50% still falls behind the cap
+  const changes = feed(auto, [0, 12, 12, 16, 16, 16, 20, 20, 20, 26], 30, 0);
+  assert.deepEqual(changes.filter(Boolean).map(c => c.scale), [0.75, 0.5, 0.25]);
+  assert.equal(auto.scale, 0.25);
+  assert.equal(auto.summary().history.at(-1).after, 26);
+});
+
+test("a window with a stall in it (loading, a long hook) neither triggers a step nor judges one", () => {
+  const auto = new AutoLighting();
+  auto.setScene("castle", "Castle");
+  // Just after loading: a 5.6 s freeze, then frames still catching up
+  assert.equal(auto.addWindow(0, 30, 0), null, "settling");
+  assert.equal(auto.addWindow(2, 30, 3000, 5600), null);
+  assert.equal(auto.addWindow(6.9, 30, 6000, 900), null, "a 900 ms frame at 7 fps is a stall, not the scene's pace");
+  assert.equal(auto.scale, 1, "nothing changed while the page was loading");
+  // Steady and slow: steps down as before
+  assert.equal(auto.addWindow(15, 30, 9000, 90), null);
+  assert.deepEqual(auto.addWindow(15, 30, 12000, 95), { scale: 0.75, reason: "slow" });
+  // A hitch right after the step is no verdict; the next clean window is
+  assert.equal(auto.addWindow(10, 30, 15000, 1200), null);
+  assert.equal(auto.summary().history[0].after, undefined, "not judged yet");
+  assert.equal(auto.addWindow(18.7, 30, 18000, 70), null, "kept");
+  assert.equal(auto.summary().history[0].after, 18.7);
+  // A slow computer's normal frames aren't stalls: at 3 fps every frame takes over 300 ms
+  const slow = new AutoLighting();
+  slow.setScene("crypt", "Crypt");
+  slow.addWindow(0, 30, 0);
+  slow.addWindow(3, 30, 3000, 360);
+  assert.deepEqual(slow.addWindow(3, 30, 6000, 380), { scale: 0.75, reason: "slow" });
+});

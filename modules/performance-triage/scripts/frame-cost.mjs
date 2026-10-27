@@ -15,30 +15,70 @@ import { drawCostRows } from "./lib/frames.mjs";
 
 const WINDOW_MS = 2500;
 const SETTLE_MS = 500;
-const SAMPLES = 15;
+const SAMPLES = 9;
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
+function median(values) {
+  const s = [...values].sort((a, b) => a - b);
+  return s[s.length >> 1];
+}
+
 /**
- * Draw the canvas `samples` times, each time between two pixel read-backs, and return the median time in ms.
- * Application#render is PIXI 7's single-frame draw (`renderer.render(stage)`), the one the ticker calls each frame.
- * The page gets a turn between samples, so the canvas keeps running while this measures.
+ * Draw the canvas once between two pixel read-backs and return how long it took in ms. Application#render is PIXI
+ * 7's single-frame draw (`renderer.render(stage)`), the one the ticker calls each frame.
  */
-async function drawMs(samples) {
+function timeDraw() {
   const app = canvas.app;
   const gl = app.renderer.gl;
   const pixel = new Uint8Array(4);
-  const finish = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); // Whatever the ticker drew before isn't counted
+  const start = performance.now();
+  app.render();
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  return performance.now() - start;
+}
+
+/** The median of `samples` timed draws. The page gets a turn between them, so the canvas keeps running. */
+async function drawMs(samples) {
   const times = [];
   for ( let i = 0; i < samples; i++ ) {
-    finish(); // Whatever the ticker drew before must not be counted
-    const start = performance.now();
-    app.render();
-    finish();
-    times.push(performance.now() - start);
+    times.push(timeDraw());
     await wait(0);
   }
-  times.sort((a, b) => a - b);
-  return times[times.length >> 1];
+  return median(times);
+}
+
+/**
+ * Time drawing with a change and without it, in pairs, so that anything else speeding the computer up or slowing it
+ * down during the test (another program, the graphics card's clock) affects both alike: a run on the work PC that
+ * timed each part against one baseline showed two parts as costing minus 6 ms. The first pair warms up whatever the
+ * change allocates and isn't counted.
+ * @param {() => (Function|null)} apply  Makes the change and returns how to undo it, or null when there's nothing to do
+ * @param {number} samples
+ * @returns {Promise<{ms: number, savedMs: number}|null>}  null when there was nothing to change, or the change
+ *   didn't hold (something else undid it while it was being timed)
+ */
+async function pairedDraws(apply, samples) {
+  const changed = [];
+  const saved = [];
+  for ( let i = 0; i <= samples; i++ ) {
+    const undo = apply();
+    if ( !undo ) return null;
+    let on;
+    try {
+      on = timeDraw();
+      if ( undo.held?.() === false ) return null;
+    } finally {
+      undo();
+    }
+    const off = timeDraw();
+    if ( i ) {
+      changed.push(on);
+      saved.push(off - on);
+    }
+    await wait(0);
+  }
+  return { ms: median(changed), savedMs: median(saved) };
 }
 
 /**
@@ -105,12 +145,12 @@ function hideLightMeshes() {
   return hide(meshes);
 }
 
-/** The Lighting resolution setting at 50%, unless this computer already uses that or less. */
+/** Lighting at half the resolution it is drawn at now, down to the lowest step (25%). */
 function halveLighting() {
   const api = game.modules.get(MODULE_ID).api;
   const current = api.lightingScale ?? 1;
-  if ( (current <= 0.5) || !api.setLightingScale ) return null;
-  const changed = api.setLightingScale(0.5);
+  if ( (current <= 0.25) || !api.setLightingScale ) return null;
+  const changed = api.setLightingScale(Math.max(0.25, current / 2));
   if ( !changed.length ) return null;
   const undo = () => api.setLightingScale(current);
   undo.held = () => changed.every(c => canvas.effects?.[c.layer]?.filter?.resolution === c.resolution);
@@ -130,7 +170,7 @@ const PARTS = {
     { id: "background", label: "Lighting: changes lights make to the map under them", object: () => canvas.effects?.background },
     { id: "darkness", label: "Lighting: darkness sources", object: () => canvas.effects?.darkness },
     { id: "lightMeshes", label: "Lighting: the lights themselves (every light hidden, layers kept)", apply: hideLightMeshes },
-    { id: "lightingHalf", label: "Lighting drawn at half resolution (nothing hidden)", apply: halveLighting }
+    { id: "lightingHalf", label: "Lighting drawn at half its current resolution (nothing hidden)", apply: halveLighting }
   ],
   interface: [
     { id: "grid", label: "Interface: grid", object: interfaceLayer("grid") },
@@ -158,7 +198,7 @@ function refreshCanvas() {
  * Run the experiments: the frame rate before and after, and the time to draw a frame with each part hidden.
  * @param {object} [options]
  * @param {number} [options.windowMs]  How long to count frames for the frame rate before and after
- * @param {number} [options.settleMs]  How long to wait after each change before timing
+ * @param {number} [options.settleMs]  How long to let the canvas settle before counting frames or timing the baseline
  * @param {number} [options.samples]   Frames drawn and timed for each measurement
  * @returns {Promise<object|null>}  null without a drawn canvas
  */
@@ -188,23 +228,13 @@ export async function measureFrameCost({ windowMs = WINDOW_MS, settleMs = SETTLE
     await wait(settleMs);
     baseMs = await drawMs(samples);
     const measure = async (id, label, apply, parent) => {
-      let undo = null;
-      try {
-        undo = apply();
-        if ( !undo ) return; // Nothing of this kind on the scene
-        await wait(settleMs);
-        const ms = await drawMs(samples);
-        if ( undo.held?.() === false ) return; // Undone by something else while timing: not a measurement of it
-        rows.push({ id, label, ms, ...(parent ? { parent } : {}) });
-      } finally {
-        undo?.();
-      }
+      const result = await pairedDraws(apply, samples);
+      if ( result ) rows.push({ id, label, ...result, ...(parent ? { parent } : {}) });
     };
     for ( const experiment of EXPERIMENTS ) await measure(experiment.id, experiment.label, experiment.apply);
     // Break down the parts that cost the most, so the report can say which knob to turn
     for ( const [parent, parts] of Object.entries(PARTS) ) {
-      const row = rows.find(r => r.id === parent);
-      const saved = row ? baseMs - row.ms : 0;
+      const saved = rows.find(r => r.id === parent)?.savedMs ?? 0;
       if ( (saved < BREAKDOWN_MS) && (saved < baseMs * BREAKDOWN_SHARE) ) continue;
       for ( const part of parts ) await measure(part.id, part.label, part.apply ?? (() => hide([part.object()])), parent);
     }

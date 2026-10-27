@@ -1,10 +1,11 @@
 /**
  * Styles for this module's windows, injected the first time one opens instead of shipping a stylesheet that every
- * client would download and parse at startup.
+ * client would download and parse at startup. They sit in Foundry's `modules` cascade layer, where manifest styles
+ * land, so themes such as FlexUI Revived and other modules' own rules aren't fought by unlayered CSS.
  */
 const STYLE_ID = "performance-triage-style";
 
-const CSS = `
+const CSS = `@layer modules {
 .ptriage .window-content { overflow-y: auto; padding: 0.5rem 0.75rem; font-size: var(--font-size-13, 13px); }
 .ptriage-header > p { margin: 0 0 0.5rem; opacity: 0.8; }
 .ptriage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-bottom: 0.5rem; }
@@ -52,6 +53,7 @@ const CSS = `
 .ptriage-census-detail > td { padding-left: 1.2rem; }
 .ptriage-chip { display: inline-block; width: auto; line-height: 1.5; margin: 0 0.2rem 0.2rem 0; padding: 0 0.4rem; font-size: 0.9em; }
 .ptriage-chip-flag { border-color: #b26a00; }
+}
 `;
 
 export function injectStyle() {
