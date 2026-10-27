@@ -29,7 +29,7 @@ export function loadPitchWorklet(ctx, url) {
 /** A small stereo room: decaying noise, decorrelated between channels. Built once per context and size. */
 const rooms = new WeakMap();
 
-function roomImpulse(ctx, seconds = 2.6) {
+function roomImpulse(ctx, seconds = 1.4) {
   let byContext = rooms.get(ctx);
   if ( !byContext ) rooms.set(ctx, byContext = new Map());
   if ( byContext.has(seconds) ) return byContext.get(seconds);

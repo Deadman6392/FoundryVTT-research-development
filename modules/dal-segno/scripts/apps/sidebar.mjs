@@ -31,7 +31,8 @@ export function decorate(root, api) {
   showNowPlaying(root, api, t);
   if ( !root.dataset.dalSegno ) {
     root.dataset.dalSegno = "1";
-    root.addEventListener("click", event => onClick(event, api));
+    // Capture, so a click on the deck's own controls is handled before (and never reaches) the directory's handlers
+    root.addEventListener("click", event => onClick(event, api), true);
   }
 }
 
@@ -82,6 +83,7 @@ function showNowPlaying(root, api, t) {
 
 function onClick(event, api) {
   if ( event.target.closest(".dal-segno-open") ) {
+    event.stopPropagation();
     api.openDeck();
     return;
   }

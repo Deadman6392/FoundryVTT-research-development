@@ -3,8 +3,8 @@
  * parts to skip) on a waveform, fine-tune them in a zoomed view, and preview them on this computer only. Loaded on
  * demand. Saving writes one flag on the sound.
  *
- * The waveform comes from decoding the file at 11 kHz in an OfflineAudioContext, about 0.4 MB of memory per minute,
- * kept only while the window is open. Files over 20 minutes get a plain timeline instead of a waveform.
+ * The waveform comes from decoding the file at 11 kHz in an OfflineAudioContext and mixing it to mono: 2.6 MB of
+ * memory per minute, kept only while the window is open. Files over 20 minutes get a plain timeline instead.
  */
 import { ARRANGEMENT_FLAG, MODULE_ID } from "../constants.mjs";
 import { matchLoopEnd, mixToMono, peaks } from "../lib/peaks.mjs";
